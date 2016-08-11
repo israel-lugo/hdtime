@@ -21,6 +21,7 @@
 *.dylib
 
 # Executables
+hdtime
 *.exe
 *.out
 *.app
