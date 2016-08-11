@@ -65,7 +65,33 @@
 })
 
 
-static void handle(const char *string, int error);
+
+/*
+ * Terminate the program if error is true.
+ *
+ * Prints the message to stderr before terminating, followed by a message
+ * describing the specified error number.
+ */
+static void check_err_errno(int error, const char *string, int errnum)
+{
+        if (error) {
+                fprintf(stderr, "%s: %s\n", string, strerror(errnum));
+                exit(EXIT_FAILURE);
+        }
+}
+
+
+
+/*
+ * Terminate the program if error is true.
+ *
+ * Prints the message to stderr before terminating.
+ */
+static inline void check_err(int error, const char *msg)
+{
+    check_err_errno(error, msg, errno);
+}
+
 
 
 static inline uint64_t align_ceil(uint64_t n, uint64_t alignment)
@@ -136,23 +162,6 @@ static unsigned int smallest_power_of_2_that_holds(unsigned int x)
 
 
 
-static void handle_errnum(const char *string, int error, int errnum)
-{
-        if (error) {
-                fprintf(stderr, "%s: %s\n", string, strerror(errnum));
-                exit(EXIT_FAILURE);
-        }
-}
-
-
-
-static void handle(const char *string, int error)
-{
-    handle_errnum(string, error, errno);
-}
-
-
-
 /*
  * Get a device's physical block size. Receives an open file descriptor for the
  * device. Exits in case of error.
@@ -163,7 +172,7 @@ unsigned int get_physical_block_size(int fd)
     int retval;
 
     retval = ioctl(fd, BLKPBSZGET, &block_size);
-    handle("ioctl(BLKPBSZGET)", retval == -1);
+    check_err(retval == -1, "ioctl(BLKPBSZGET)");
 
     return block_size;
 }
@@ -180,7 +189,7 @@ uint64_t get_dev_size(int fd)
     int retval;
 
     retval = ioctl(fd, BLKGETSIZE64, &size);
-    handle("ioctl(BLKGETSIZE64)", retval == -1);
+    check_err(retval == -1, "ioctl(BLKGETSIZE64)");
 
     return size;
 }
@@ -196,9 +205,9 @@ void read_at(int fd, void *buffer, size_t count, off64_t offset)
     ssize_t read_ok;
 
     seek_ok = lseek64(fd, offset, SEEK_SET);
-    handle("lseek64", seek_ok == (off64_t)-1);
+    check_err(seek_ok == (off64_t)-1, "lseek64");
     read_ok = read(fd, buffer, count);
-    handle("read", read_ok < 0);
+    check_err(read_ok < 0, "read");
 }
 
 
@@ -214,7 +223,7 @@ long double get_cur_timestamp(void)
     int retval;
 
     retval = clock_gettime(CLOCK_MONOTONIC, &now);
-    handle("clock_gettime", retval == -1);
+    check_err(retval == -1, "clock_gettime");
 
     return (long double)now.tv_sec + (long double)now.tv_nsec / 1000000000.0L;
 }
@@ -234,7 +243,7 @@ long double get_timing_error(void)
 
     /* get the underlying clock's resolution (lower bound) */
     retval = clock_getres(CLOCK_MONOTONIC, &res);
-    handle("clock_getres", retval == -1);
+    check_err(retval == -1, "clock_getres");
 
     resolution = (long double)res.tv_sec
                  + (long double)res.tv_nsec / 1000000000.0L;
@@ -264,7 +273,7 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
     retval = posix_memalign(&buffer,
                             smallest_power_of_2_that_holds(alignment),
                             size);
-    handle_errnum("posix_memalign", retval != 0, retval);
+    check_err_errno(retval != 0, "posix_memalign", retval);
 
     return buffer;
 }
@@ -428,7 +437,7 @@ int main(int argc, char **argv)
         }
 
         fd = open(argv[1], O_RDONLY | O_DIRECT | O_SYNC);
-        handle("open", fd < 0);
+        check_err(fd < 0, "open");
 
         benchmark(fd, argv[1]);
 
