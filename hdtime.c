@@ -120,6 +120,11 @@ static inline uint64_t random64(void)
 
 
 
+/*
+ * Return the logarithm of x to base 2, rounded down to zero.
+ *
+ * x must not be zero.
+ */
 static unsigned int log2_floor(unsigned int x)
 {
     unsigned int exp = 0;
@@ -137,6 +142,12 @@ static unsigned int log2_floor(unsigned int x)
 
 
 
+/*
+ * Return the smallest power of 2 larger than or equal to x.
+ *
+ * Exits if x is larger than the largest power of 2 that will fit in an
+ * unsigned int.
+ */
 static unsigned int smallest_power_of_2_that_holds(unsigned int x)
 {
     unsigned int exp;
@@ -325,6 +336,11 @@ long double get_block_read_time(int fd, uint64_t dev_size,
 
 
 
+/*
+ * Find out (through measurements) the average seek time for blocks of
+ * block_size bytes, in the device whose file descriptor is fd, which has a
+ * size of num_blocks blocks. Exits in case of error.
+ */
 long double get_seek_time(int fd, uint64_t block_size, uint64_t num_blocks,
         long double block_read_time, long double *p_total_time)
 {
