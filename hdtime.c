@@ -72,7 +72,7 @@
  * Prints the message to stderr before terminating, followed by a message
  * describing the specified error number.
  */
-static void check_err_errno(int error, const char *string, int errnum)
+static void die_if_with_errno(int error, const char *string, int errnum)
 {
         if (error) {
                 fprintf(stderr, "%s: %s\n", string, strerror(errnum));
@@ -87,9 +87,9 @@ static void check_err_errno(int error, const char *string, int errnum)
  *
  * Prints the message to stderr before terminating.
  */
-static inline void check_err(int error, const char *msg)
+static inline void die_if(int error, const char *msg)
 {
-    check_err_errno(error, msg, errno);
+    die_if_with_errno(error, msg, errno);
 }
 
 
@@ -183,7 +183,7 @@ unsigned int get_physical_block_size(int fd)
     int retval;
 
     retval = ioctl(fd, BLKPBSZGET, &block_size);
-    check_err(retval == -1, "ioctl(BLKPBSZGET)");
+    die_if(retval == -1, "ioctl(BLKPBSZGET)");
 
     return block_size;
 }
@@ -200,7 +200,7 @@ uint64_t get_dev_size(int fd)
     int retval;
 
     retval = ioctl(fd, BLKGETSIZE64, &size);
-    check_err(retval == -1, "ioctl(BLKGETSIZE64)");
+    die_if(retval == -1, "ioctl(BLKGETSIZE64)");
 
     return size;
 }
@@ -216,9 +216,9 @@ void read_at(int fd, void *buffer, size_t count, off64_t offset)
     ssize_t read_ok;
 
     seek_ok = lseek64(fd, offset, SEEK_SET);
-    check_err(seek_ok == (off64_t)-1, "lseek64");
+    die_if(seek_ok == (off64_t)-1, "lseek64");
     read_ok = read(fd, buffer, count);
-    check_err(read_ok < 0, "read");
+    die_if(read_ok < 0, "read");
 }
 
 
@@ -234,7 +234,7 @@ long double get_cur_timestamp(void)
     int retval;
 
     retval = clock_gettime(CLOCK_MONOTONIC, &now);
-    check_err(retval == -1, "clock_gettime");
+    die_if(retval == -1, "clock_gettime");
 
     return (long double)now.tv_sec + (long double)now.tv_nsec / 1000000000.0L;
 }
@@ -254,7 +254,7 @@ long double get_timing_error(void)
 
     /* get the underlying clock's resolution (lower bound) */
     retval = clock_getres(CLOCK_MONOTONIC, &res);
-    check_err(retval == -1, "clock_getres");
+    die_if(retval == -1, "clock_getres");
 
     resolution = (long double)res.tv_sec
                  + (long double)res.tv_nsec / 1000000000.0L;
@@ -284,7 +284,7 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
     retval = posix_memalign(&buffer,
                             smallest_power_of_2_that_holds(alignment),
                             size);
-    check_err_errno(retval != 0, "posix_memalign", retval);
+    die_if_with_errno(retval != 0, "posix_memalign", retval);
 
     return buffer;
 }
@@ -453,7 +453,7 @@ int main(int argc, char **argv)
         }
 
         fd = open(argv[1], O_RDONLY | O_DIRECT | O_SYNC);
-        check_err(fd < 0, "open");
+        die_if(fd < 0, "open");
 
         benchmark(fd, argv[1]);
 
