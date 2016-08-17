@@ -311,8 +311,9 @@ long double get_block_read_time(int fd, uint64_t dev_size,
         read_size = dev_size;
     }
 
+    /* two reads: beginning and end of the device */
     printf("Reading %.2f MiB to determine sequential read time, please wait...\n",
-           (double)read_size / (512 * 1024));
+           (double)read_size / MIB * 2);
 
     buffer = allocate_aligned_memory(block_size, read_size);
 
