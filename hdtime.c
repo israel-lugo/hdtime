@@ -74,10 +74,10 @@
  */
 static void die_if_with_errno(int error, const char *string, int errnum)
 {
-        if (error) {
-                fprintf(stderr, "%s: %s\n", string, strerror(errnum));
-                exit(EXIT_FAILURE);
-        }
+    if (error) {
+        fprintf(stderr, "%s: %s\n", string, strerror(errnum));
+        exit(EXIT_FAILURE);
+    }
 }
 
 
