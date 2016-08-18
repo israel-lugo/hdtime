@@ -72,10 +72,10 @@
  * Prints the message to stderr before terminating, followed by a message
  * describing the specified error number.
  */
-static void die_if_with_errno(int error, const char *string, int errnum)
+static inline void die_if_with_errno(int error, const char *msg, int errnum)
 {
     if (error) {
-        fprintf(stderr, "%s: %s\n", string, strerror(errnum));
+        fprintf(stderr, "%s: %s\n", msg, strerror(errnum));
         exit(EXIT_FAILURE);
     }
 }
