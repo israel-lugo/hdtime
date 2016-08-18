@@ -139,6 +139,8 @@ static unsigned int log2_floor(unsigned int x)
         x >>= 1;
     }
 
+    assert(exp <= sizeof(x) * 8);
+
     return exp;
 }
 
