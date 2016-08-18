@@ -26,7 +26,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <errno.h>
 #include <time.h>
 #include <signal.h>
 #include <sys/ioctl.h>
@@ -35,7 +34,6 @@
 #include <sys/fcntl.h>
 #include <linux/fs.h>
 #include <string.h>
-#include <errno.h>
 #include <limits.h>
 
 #include <stdint.h>
@@ -85,11 +83,15 @@ static inline void die_if_with_errno(int error, const char *msg, int errnum)
 /*
  * Terminate the program if error is true.
  *
- * Prints the message to stderr before terminating.
+ * Prints the message to stderr before terminating, followed by a message
+ * describing the current value in errno.
  */
 static inline void die_if(int error, const char *msg)
 {
-    die_if_with_errno(error, msg, errno);
+    if (error) {
+        perror(msg);
+        exit(EXIT_FAILURE);
+    }
 }
 
 
