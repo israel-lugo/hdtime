@@ -35,6 +35,7 @@
 #include <linux/fs.h>
 #include <string.h>
 #include <limits.h>
+#include <errno.h>
 
 #include <stdint.h>
 #include <inttypes.h>
@@ -96,9 +97,9 @@ static inline void die_if(int error, const char *msg)
 
 
 
-static inline uint64_t align_ceil(uint64_t n, uint64_t alignment)
+static inline size_t align_ceil(size_t n, size_t alignment)
 {
-    const uint64_t remainder = n % alignment;
+    const size_t remainder = n % alignment;
 
     return remainder != 0 ? (n - remainder) + alignment : n;
 }
@@ -190,6 +191,37 @@ unsigned int get_physical_block_size(int fd)
     die_if(retval == -1, "ioctl(BLKPBSZGET)");
 
     return block_size;
+}
+
+
+
+/*
+ * Get buffer alignment for reading from fd.
+ *
+ * Uses the POSIX fpathconf interface to query proper alignment from the
+ * system. In case of error or unspecified alignment, assumes fd is a block
+ * device and falls back to checking its block size.
+ */
+size_t get_readbuf_align(int fd)
+{
+    long align_l;
+
+    errno = 0;
+    align_l = fpathconf(fd, _PC_REC_XFER_ALIGN);
+
+    assert(align_l >= -1);
+
+    /* fallback to device's block size in case of error or useless value */
+    switch (align_l)
+    {
+        case -1:    /* no specific align recommendation, or error */
+            die_if(errno != 0, "fpathconf");
+            /* FALL THROUGH */
+        case 0:     /* 0 align makes no sense */
+            align_l = (long)get_physical_block_size(fd);
+    }
+
+    return (size_t)align_l;
 }
 
 
@@ -300,15 +332,15 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
  * block of block_size bytes, in the device whose file descriptor is fd, which
  * has a size of dev_size. Exits in case of error.
  */
-long double get_block_read_time(int fd, uint64_t dev_size,
+long double get_block_read_time(int fd, size_t alignment, uint64_t dev_size,
         unsigned int block_size, unsigned int *p_total_bytes,
         long double *p_total_read_time)
 {
-    unsigned int read_size = align_ceil(TIMING_READ_BYTES, block_size);
+    size_t read_size = align_ceil(TIMING_READ_BYTES, alignment);
     char *buffer;
     long double start, end, delta;
-    
-    assert(read_size % block_size == 0);
+
+    assert(read_size % alignment == 0);
 
     if (read_size > dev_size)
     {
@@ -319,7 +351,7 @@ long double get_block_read_time(int fd, uint64_t dev_size,
     printf("Reading %.2f MiB to determine sequential read time, please wait...\n",
            (double)read_size / MIB * 2);
 
-    buffer = allocate_aligned_memory(block_size, read_size);
+    buffer = allocate_aligned_memory(alignment, read_size);
 
     start = get_cur_timestamp();
     read_at(fd, buffer, read_size, 0);
@@ -346,14 +378,15 @@ long double get_block_read_time(int fd, uint64_t dev_size,
  * block_size bytes, in the device whose file descriptor is fd, which has a
  * size of num_blocks blocks. Exits in case of error.
  */
-long double get_seek_time(int fd, unsigned int block_size, uint64_t num_blocks,
-        long double block_read_time, long double *p_total_time)
+long double get_seek_time(int fd, size_t alignment, unsigned int block_size,
+        uint64_t num_blocks, long double block_read_time,
+        long double *p_total_time)
 {
     long double start, end, delta;
     char *buffer;
     int i;
 
-    buffer = allocate_aligned_memory(block_size, block_size);
+    buffer = allocate_aligned_memory(alignment, block_size);
 
     start = get_cur_timestamp();
     for (i=0; i<NUM_SEEKS; i++)
@@ -382,6 +415,7 @@ void benchmark(int fd, const char *path)
     long double block_read_time, seq_read_time, total_seek_time, seek_time;
     unsigned int seq_read_bytes;
     unsigned int block_size;
+    size_t alignment;
     time_t seed;
 
     block_size = get_physical_block_size(fd);
@@ -397,7 +431,9 @@ void benchmark(int fd, const char *path)
         exit(1);
     }
 
-    block_read_time = get_block_read_time(fd, dev_size, block_size,
+    alignment = get_readbuf_align(fd);
+
+    block_read_time = get_block_read_time(fd, alignment, dev_size, block_size,
                                           &seq_read_bytes, &seq_read_time);
 
     time(&seed);
@@ -406,8 +442,8 @@ void benchmark(int fd, const char *path)
     printf("Performing %u random reads, please wait a few seconds...\n",
            NUM_SEEKS);
 
-    seek_time = get_seek_time(fd, block_size, num_blocks, block_read_time,
-                              &total_seek_time);
+    seek_time = get_seek_time(fd, alignment, block_size, num_blocks,
+                              block_read_time, &total_seek_time);
 
     close(fd);
 
