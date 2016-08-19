@@ -346,7 +346,7 @@ long double get_block_read_time(int fd, uint64_t dev_size,
  * block_size bytes, in the device whose file descriptor is fd, which has a
  * size of num_blocks blocks. Exits in case of error.
  */
-long double get_seek_time(int fd, uint64_t block_size, uint64_t num_blocks,
+long double get_seek_time(int fd, unsigned int block_size, uint64_t num_blocks,
         long double block_read_time, long double *p_total_time)
 {
     long double start, end, delta;
