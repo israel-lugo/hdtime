@@ -48,7 +48,9 @@
 #define NUM_SEEKS 200
 
 #define MIB (1024 * 1024)
-#define TIMING_READ_BYTES (64 * MIB)
+
+/* Amount of bytes to read sequentially in a single block. */
+#define SEQ_READ_BYTES (64 * MIB)
 
 
 #define min(x, y) ({  \
@@ -336,7 +338,7 @@ long double get_block_read_time(int fd, size_t alignment, uint64_t dev_size,
         unsigned int block_size, unsigned int *p_total_bytes,
         long double *p_total_read_time)
 {
-    size_t read_size = align_ceil(TIMING_READ_BYTES, alignment);
+    size_t read_size = align_ceil(SEQ_READ_BYTES, alignment);
     char *buffer;
     long double start, end, delta;
 
