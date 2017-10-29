@@ -343,34 +343,42 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
 
 
 /*
- * Find out (through measurements) the average time it takes to read a single
- * block of block_size bytes, in the device whose file descriptor is fd, which
- * has a size of dev_size. Exits in case of error.
+ * Get a block device's average block read time.
+ *
+ * Does a sequencial read test on a block device, to find its average read
+ * speed. Receives the file descriptor of the block device and a pointer to a
+ * struct with information about the device. p_total_bytes, if non-NULL, should
+ * point to an unsigned int which will be set to the total amount of bytes read
+ * from the device. p_total_read_time, if non-NULL, should point to a long
+ * double which will be set to the amount of time that was spent reading, in
+ * seconds.
+ *
+ * Returns the average time it takes to read a single block of the device.
+ * Exits in case of error.
  */
-long double get_block_read_time(int fd, size_t alignment, uint64_t dev_size,
-        unsigned int block_size, unsigned int *p_total_bytes,
-        long double *p_total_read_time)
+long double get_block_read_time(int fd, const struct blkdev_info *blkdev_info,
+        unsigned int *p_total_bytes, long double *p_total_read_time)
 {
-    size_t read_size = align_ceil(SEQ_READ_BYTES, alignment);
+    size_t read_size = align_ceil(SEQ_READ_BYTES, blkdev_info->alignment);
     char *buffer;
     long double start, end, delta;
 
-    assert(read_size % alignment == 0);
+    assert(read_size % blkdev_info->alignment == 0);
 
-    if (read_size > dev_size)
+    if (read_size > blkdev_info->dev_size)
     {
-        read_size = dev_size;
+        read_size = blkdev_info->dev_size;
     }
 
     /* two reads: beginning and end of the device */
     printf("Reading %.2f MiB to determine sequential read time, please wait...\n",
            (double)read_size / MIB * 2);
 
-    buffer = allocate_aligned_memory(alignment, read_size);
+    buffer = allocate_aligned_memory(blkdev_info->alignment, read_size);
 
     start = get_cur_timestamp();
     read_at(fd, buffer, read_size, 0);
-    read_at(fd, buffer, read_size, dev_size - read_size);
+    read_at(fd, buffer, read_size, blkdev_info->dev_size - read_size);
     end = get_cur_timestamp();
 
     free(buffer);
@@ -383,29 +391,34 @@ long double get_block_read_time(int fd, size_t alignment, uint64_t dev_size,
     if (p_total_read_time != NULL)
         *p_total_read_time = delta;
 
-    return delta / ((read_size * 2) / block_size);
+    return delta / ((read_size * 2) / blkdev_info->block_size);
 }
 
 
 
 /*
- * Get a block device's seek time.
+ * Get a block device's average seek time.
  *
- * Finds out (through measurements) the average seek time for blocks of
- * block_size bytes, in the device whose file descriptor is fd, which has a
- * size of num_blocks blocks. Exits in case of error.
+ * Does a random access read test on a block device, to find its average seek
+ * time. Receives the file descriptor of the block device, a pointer to a
+ * struct with information about the device, and the amount of time it takes to
+ * read a single block of the device, in seconds. p_total_time, if non-NULL,
+ * should point to a long double which will be set to the amount of time that
+ * was spent seeking and reading block data.
  *
+ * Returns the average seek time of the block device. Exits in case of error.
  * Requires randomness to be previously initialized (call init_randomness).
  */
-long double get_seek_time(int fd, size_t alignment, unsigned int block_size,
-        uint64_t num_blocks, long double block_read_time,
-        long double *p_total_time)
+long double get_seek_time(int fd, const struct blkdev_info *blkdev_info,
+        long double block_read_time, long double *p_total_time)
 {
+    const unsigned int block_size = blkdev_info->block_size;
+    const uint64_t num_blocks = blkdev_info->num_blocks;
     long double start, end, delta;
     char *buffer;
     int i;
 
-    buffer = allocate_aligned_memory(alignment, block_size);
+    buffer = allocate_aligned_memory(blkdev_info->alignment, block_size);
 
     start = get_cur_timestamp();
     for (i=0; i<NUM_SEEKS; i++)
@@ -480,15 +493,14 @@ void benchmark(int fd, const char *path)
     long double block_read_time, seq_read_time, total_seek_time, seek_time;
     unsigned int seq_read_bytes;
 
-    block_read_time = get_block_read_time(fd, binfo.alignment, binfo.dev_size,
-            binfo.block_size, &seq_read_bytes, &seq_read_time);
+    block_read_time = get_block_read_time(fd, &binfo, &seq_read_bytes,
+            &seq_read_time);
 
     printf("Performing %u random reads, please wait a few seconds...\n",
            NUM_SEEKS);
 
     init_randomness();
-    seek_time = get_seek_time(fd, binfo.alignment, binfo.block_size,
-            binfo.num_blocks, block_read_time, &total_seek_time);
+    seek_time = get_seek_time(fd, &binfo, block_read_time, &total_seek_time);
 
     printf("\n"
            "%s:\n"
