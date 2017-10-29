@@ -72,6 +72,14 @@
 #endif
 
 
+struct blkdev_info {
+    uint64_t dev_size;
+    uint64_t num_blocks;
+    unsigned int block_size;
+    size_t alignment;
+};
+
+
 /*
  * Terminate the program if error is true.
  *
@@ -381,9 +389,13 @@ long double get_block_read_time(int fd, size_t alignment, uint64_t dev_size,
 
 
 /*
- * Find out (through measurements) the average seek time for blocks of
+ * Get a block device's seek time.
+ *
+ * Finds out (through measurements) the average seek time for blocks of
  * block_size bytes, in the device whose file descriptor is fd, which has a
  * size of num_blocks blocks. Exits in case of error.
+ *
+ * Requires randomness to be previously initialized (call init_randomness).
  */
 long double get_seek_time(int fd, size_t alignment, unsigned int block_size,
         uint64_t num_blocks, long double block_read_time,
@@ -416,41 +428,67 @@ long double get_seek_time(int fd, size_t alignment, unsigned int block_size,
 
 
 
-void benchmark(int fd, const char *path)
+/*
+ * Initialize random number generator engine.
+ */
+static void init_randomness(void)
 {
-    uint64_t dev_size, num_blocks;
-    long double block_read_time, seq_read_time, total_seek_time, seek_time;
-    unsigned int seq_read_bytes;
-    unsigned int block_size;
-    size_t alignment;
     time_t seed;
-
-    block_size = get_physical_block_size(fd);
-    dev_size = get_dev_size(fd);
-    num_blocks = dev_size / block_size;
-
-    if (dev_size < block_size)
-    {
-        fprintf(stderr,
-                "error: block size (%u) is greater than device itself (%" PRIu64 ")\n",
-                block_size,
-                dev_size);
-        exit(1);
-    }
-
-    alignment = get_readbuf_align(fd);
-
-    block_read_time = get_block_read_time(fd, alignment, dev_size, block_size,
-                                          &seq_read_bytes, &seq_read_time);
 
     time(&seed);
     srandom(seed);
+}
+
+
+
+/*
+ * Get information about a block device.
+ *
+ * Returns a struct blkdev_info, containing information about the block device
+ * in file descriptor fd. Exits in case of error.
+ */
+struct blkdev_info get_blkdev_info(int fd)
+{
+    struct blkdev_info blkdev_info;
+    uint64_t dev_size, num_blocks;
+    unsigned int block_size;
+    size_t alignment;
+
+    blkdev_info.block_size = get_physical_block_size(fd);
+    blkdev_info.dev_size = get_dev_size(fd);
+    blkdev_info.num_blocks = blkdev_info.dev_size / blkdev_info.block_size;
+
+    if (blkdev_info.dev_size < blkdev_info.block_size)
+    {
+        fprintf(stderr,
+                "error: block size (%u) is greater than device itself (%" PRIu64 ")\n",
+                blkdev_info.block_size,
+                blkdev_info.dev_size);
+        exit(1);
+    }
+
+    blkdev_info.alignment = get_readbuf_align(fd);
+
+    return blkdev_info;
+}
+
+
+
+void benchmark(int fd, const char *path)
+{
+    const struct blkdev_info binfo = get_blkdev_info(fd);
+    long double block_read_time, seq_read_time, total_seek_time, seek_time;
+    unsigned int seq_read_bytes;
+
+    block_read_time = get_block_read_time(fd, binfo.alignment, binfo.dev_size,
+            binfo.block_size, &seq_read_bytes, &seq_read_time);
 
     printf("Performing %u random reads, please wait a few seconds...\n",
            NUM_SEEKS);
 
-    seek_time = get_seek_time(fd, alignment, block_size, num_blocks,
-                              block_read_time, &total_seek_time);
+    init_randomness();
+    seek_time = get_seek_time(fd, binfo.alignment, binfo.block_size,
+            binfo.num_blocks, block_read_time, &total_seek_time);
 
     printf("\n"
            "%s:\n"
@@ -467,10 +505,10 @@ void benchmark(int fd, const char *path)
            "\n"
            " Minimum time measurement error: +/- %Lf ms\n",
            path,
-           block_size,
-           (long double)(dev_size / 1024) / 1024,
-           num_blocks,
-           dev_size,
+           binfo.block_size,
+           (long double)(binfo.dev_size / 1024) / 1024,
+           binfo.num_blocks,
+           binfo.dev_size,
            ((long double)seq_read_bytes / seq_read_time) / (1024 * 1024),
            (long double)seq_read_bytes / (1024 * 1024),
            seq_read_time,
