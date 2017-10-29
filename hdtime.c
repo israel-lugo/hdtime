@@ -447,8 +447,6 @@ void benchmark(int fd, const char *path)
     seek_time = get_seek_time(fd, alignment, block_size, num_blocks,
                               block_read_time, &total_seek_time);
 
-    close(fd);
-
     printf("\n"
            "%s:\n"
            " Physical block size: %u bytes\n"
