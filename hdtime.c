@@ -65,6 +65,11 @@
   _x > _y ? _x : _y;  \
 })
 
+/* CLOCK_MONOTONIC_RAW is immune to incremental adjustments performed by
+ * adjtime() or NTP; however, it is Linux-specific */
+#ifndef CLOCK_MONOTONIC_RAW
+#  define CLOCK_MONOTONIC_RAW CLOCK_MONOTONIC
+#endif
 
 
 /*
@@ -271,7 +276,7 @@ long double get_cur_timestamp(void)
     struct timespec now;
     int retval;
 
-    retval = clock_gettime(CLOCK_MONOTONIC, &now);
+    retval = clock_gettime(CLOCK_MONOTONIC_RAW, &now);
     die_if(retval == -1, "clock_gettime");
 
     return (long double)now.tv_sec + (long double)now.tv_nsec / 1000000000.0L;
@@ -291,7 +296,7 @@ long double get_timing_error(void)
     long double resolution, t0, t1, delta;
 
     /* get the underlying clock's resolution (lower bound) */
-    retval = clock_getres(CLOCK_MONOTONIC, &res);
+    retval = clock_getres(CLOCK_MONOTONIC_RAW, &res);
     die_if(retval == -1, "clock_getres");
 
     resolution = (long double)res.tv_sec
