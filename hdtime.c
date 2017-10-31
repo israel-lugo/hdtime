@@ -206,6 +206,20 @@ static unsigned int smallest_power_of_2_that_holds(unsigned int x)
 
 
 /*
+ * Calculate difference between two struct timespec.
+ *
+ * Returns the difference in seconds between time t1 and time t0, represented
+ * as a long double.
+ */
+long double timespec_diff(const struct timespec *t1, const struct timespec *t0)
+{
+    return ((long double)t1->tv_sec - (long double)t0->tv_sec)
+        + ((long double)t1->tv_nsec - (long double)t0->tv_nsec)/1000000000.0L;
+}
+
+
+
+/*
  * Get a device's physical block size. Receives an open file descriptor for the
  * device. Exits in case of error.
  */
@@ -287,19 +301,18 @@ void read_at(int fd, void *buffer, size_t count, off64_t offset)
 
 
 /*
- * Get a timestamp in seconds, with very high precision. The time value is
- * relative to some unspecified starting point; useful for relative time
- * calculations (timing measurements).
+ * Get a timestamp in seconds, with very high precision.
+ *
+ * Receives a pointer to a struct timespec, where the timestamp will be stored.
+ * The time value is relative to some unspecified starting point; useful for
+ * relative time calculations (timing measurements).
  */
-long double get_cur_timestamp(void)
+void get_cur_timestamp(struct timespec *now)
 {
-    struct timespec now;
     int retval;
 
-    retval = clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+    retval = clock_gettime(CLOCK_MONOTONIC_RAW, now);
     die_if(retval == -1, "clock_gettime");
-
-    return (long double)now.tv_sec + (long double)now.tv_nsec / 1000000000.0L;
 }
 
 
@@ -313,7 +326,8 @@ long double get_timing_tolerance(void)
 {
     struct timespec res;
     int retval;
-    long double resolution, t0, t1, delta;
+    struct timespec t0, t1;
+    long double resolution, delta;
 
     /* get the underlying clock's resolution (lower bound) */
     retval = clock_getres(CLOCK_MONOTONIC_RAW, &res);
@@ -323,9 +337,9 @@ long double get_timing_tolerance(void)
                  + (long double)res.tv_nsec / 1000000000.0L;
 
     /* measure the actual overhead of measuring time */
-    t0 = get_cur_timestamp();
-    t1 = get_cur_timestamp();
-    delta = t1 - t0;
+    get_cur_timestamp(&t0);
+    get_cur_timestamp(&t1);
+    delta = timespec_diff(&t1, &t0);
 
     /* tolerance is +/- half the maximum error */
     return max(resolution, delta) / 2;
@@ -373,7 +387,8 @@ long double get_block_read_time(int fd, const struct blkdev_info *blkdev_info,
 {
     size_t read_size = align_ceil(SEQ_READ_BYTES, blkdev_info->alignment);
     char *buffer;
-    long double start, end, delta;
+    struct timespec start, end;
+    long double delta;
 
     assert(read_size % blkdev_info->alignment == 0);
 
@@ -388,14 +403,14 @@ long double get_block_read_time(int fd, const struct blkdev_info *blkdev_info,
 
     buffer = allocate_aligned_memory(blkdev_info->alignment, read_size);
 
-    start = get_cur_timestamp();
+    get_cur_timestamp(&start);
     read_at(fd, buffer, read_size, 0);
     read_at(fd, buffer, read_size, blkdev_info->dev_size - read_size);
-    end = get_cur_timestamp();
+    get_cur_timestamp(&end);
 
     free(buffer);
 
-    delta = end - start;
+    delta = timespec_diff(&end, &start);
 
     if (p_total_bytes != NULL)
         *p_total_bytes = read_size * 2;
@@ -426,7 +441,8 @@ long double get_seek_time(int fd, const struct blkdev_info *blkdev_info,
 {
     const unsigned int block_size = blkdev_info->block_size;
     const uint64_t num_blocks = blkdev_info->num_blocks;
-    long double start, end, delta;
+    struct timespec start, end;
+    long double delta;
     char *buffer;
     int i;
 
@@ -435,18 +451,18 @@ long double get_seek_time(int fd, const struct blkdev_info *blkdev_info,
     printf("Performing %u random reads, please wait a few seconds...\n",
            NUM_SEEKS);
 
-    start = get_cur_timestamp();
+    get_cur_timestamp(&start);
     for (i=0; i<NUM_SEEKS; i++)
     {
         uint64_t block_idx = random64() % num_blocks;
 
         read_at(fd, buffer, block_size, block_idx * block_size);
     }
-    end = get_cur_timestamp();
+    get_cur_timestamp(&end);
 
     free(buffer);
 
-    delta = end - start;
+    delta = timespec_diff(&end, &start);
 
     if (p_total_time != NULL)
         *p_total_time = delta;
