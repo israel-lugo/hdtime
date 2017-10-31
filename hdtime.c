@@ -72,6 +72,26 @@
 #endif
 
 
+struct blkdev_info {
+    uint64_t dev_size;
+    uint64_t num_blocks;
+    unsigned int block_size;
+    size_t alignment;
+};
+
+
+struct benchmark_results {
+    char *path;
+    struct blkdev_info dev_info;
+    unsigned int seq_read_bytes;
+    long double seq_read_time;
+    long double block_read_time;
+    long double total_randaccess_time;
+    long double seek_time;
+};
+
+
+
 /*
  * Terminate the program if error is true.
  *
@@ -285,11 +305,11 @@ long double get_cur_timestamp(void)
 
 
 /*
- * Calculate the error margin in taking two time measurements and calculating
- * the time delta. Returns half the maximum error in seconds; the actual error
- * margin is +/- the returned value.
+ * Calculate the tolerance in taking two time measurements and calculating the
+ * time delta. Returns half the maximum error in seconds; the actual tolerance
+ * is +/- the returned value.
  */
-long double get_timing_error(void)
+long double get_timing_tolerance(void)
 {
     struct timespec res;
     int retval;
@@ -307,7 +327,7 @@ long double get_timing_error(void)
     t1 = get_cur_timestamp();
     delta = t1 - t0;
 
-    /* error margin is +/- half the maximum error */
+    /* tolerance is +/- half the maximum error */
     return max(resolution, delta) / 2;
 }
 
@@ -335,34 +355,42 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
 
 
 /*
- * Find out (through measurements) the average time it takes to read a single
- * block of block_size bytes, in the device whose file descriptor is fd, which
- * has a size of dev_size. Exits in case of error.
+ * Get a block device's average block read time.
+ *
+ * Does a sequencial read test on a block device, to find its average read
+ * speed. Receives the file descriptor of the block device and a pointer to a
+ * struct with information about the device. p_total_bytes, if non-NULL, should
+ * point to an unsigned int which will be set to the total amount of bytes read
+ * from the device. p_total_read_time, if non-NULL, should point to a long
+ * double which will be set to the amount of time that was spent reading, in
+ * seconds.
+ *
+ * Returns the average time it takes to read a single block of the device.
+ * Exits in case of error.
  */
-long double get_block_read_time(int fd, size_t alignment, uint64_t dev_size,
-        unsigned int block_size, unsigned int *p_total_bytes,
-        long double *p_total_read_time)
+long double get_block_read_time(int fd, const struct blkdev_info *blkdev_info,
+        unsigned int *p_total_bytes, long double *p_total_read_time)
 {
-    size_t read_size = align_ceil(SEQ_READ_BYTES, alignment);
+    size_t read_size = align_ceil(SEQ_READ_BYTES, blkdev_info->alignment);
     char *buffer;
     long double start, end, delta;
 
-    assert(read_size % alignment == 0);
+    assert(read_size % blkdev_info->alignment == 0);
 
-    if (read_size > dev_size)
+    if (read_size > blkdev_info->dev_size)
     {
-        read_size = dev_size;
+        read_size = blkdev_info->dev_size;
     }
 
     /* two reads: beginning and end of the device */
     printf("Reading %.2f MiB to determine sequential read time, please wait...\n",
            (double)read_size / MIB * 2);
 
-    buffer = allocate_aligned_memory(alignment, read_size);
+    buffer = allocate_aligned_memory(blkdev_info->alignment, read_size);
 
     start = get_cur_timestamp();
     read_at(fd, buffer, read_size, 0);
-    read_at(fd, buffer, read_size, dev_size - read_size);
+    read_at(fd, buffer, read_size, blkdev_info->dev_size - read_size);
     end = get_cur_timestamp();
 
     free(buffer);
@@ -375,25 +403,37 @@ long double get_block_read_time(int fd, size_t alignment, uint64_t dev_size,
     if (p_total_read_time != NULL)
         *p_total_read_time = delta;
 
-    return delta / ((read_size * 2) / block_size);
+    return delta / ((read_size * 2) / blkdev_info->block_size);
 }
 
 
 
 /*
- * Find out (through measurements) the average seek time for blocks of
- * block_size bytes, in the device whose file descriptor is fd, which has a
- * size of num_blocks blocks. Exits in case of error.
+ * Get a block device's average seek time.
+ *
+ * Does a random access read test on a block device, to find its average seek
+ * time. Receives the file descriptor of the block device, a pointer to a
+ * struct with information about the device, and the amount of time it takes to
+ * read a single block of the device, in seconds. p_total_time, if non-NULL,
+ * should point to a long double which will be set to the amount of time that
+ * was spent seeking and reading block data.
+ *
+ * Returns the average seek time of the block device. Exits in case of error.
+ * Requires randomness to be previously initialized (call init_randomness).
  */
-long double get_seek_time(int fd, size_t alignment, unsigned int block_size,
-        uint64_t num_blocks, long double block_read_time,
-        long double *p_total_time)
+long double get_seek_time(int fd, const struct blkdev_info *blkdev_info,
+        long double block_read_time, long double *p_total_time)
 {
+    const unsigned int block_size = blkdev_info->block_size;
+    const uint64_t num_blocks = blkdev_info->num_blocks;
     long double start, end, delta;
     char *buffer;
     int i;
 
-    buffer = allocate_aligned_memory(alignment, block_size);
+    buffer = allocate_aligned_memory(blkdev_info->alignment, block_size);
+
+    printf("Performing %u random reads, please wait a few seconds...\n",
+           NUM_SEEKS);
 
     start = get_cur_timestamp();
     for (i=0; i<NUM_SEEKS; i++)
@@ -416,41 +456,90 @@ long double get_seek_time(int fd, size_t alignment, unsigned int block_size,
 
 
 
-void benchmark(int fd, const char *path)
+/*
+ * Initialize random number generator engine.
+ */
+static void init_randomness(void)
 {
-    uint64_t dev_size, num_blocks;
-    long double block_read_time, seq_read_time, total_seek_time, seek_time;
-    unsigned int seq_read_bytes;
-    unsigned int block_size;
-    size_t alignment;
     time_t seed;
-
-    block_size = get_physical_block_size(fd);
-    dev_size = get_dev_size(fd);
-    num_blocks = dev_size / block_size;
-
-    if (dev_size < block_size)
-    {
-        fprintf(stderr,
-                "error: block size (%u) is greater than device itself (%" PRIu64 ")\n",
-                block_size,
-                dev_size);
-        exit(1);
-    }
-
-    alignment = get_readbuf_align(fd);
-
-    block_read_time = get_block_read_time(fd, alignment, dev_size, block_size,
-                                          &seq_read_bytes, &seq_read_time);
 
     time(&seed);
     srandom(seed);
+}
 
-    printf("Performing %u random reads, please wait a few seconds...\n",
-           NUM_SEEKS);
 
-    seek_time = get_seek_time(fd, alignment, block_size, num_blocks,
-                              block_read_time, &total_seek_time);
+
+/*
+ * Get information about a block device.
+ *
+ * Receives the file descriptor of the block device, and a pointer to a struct
+ * blkdev_info where the results will be stored.
+ *
+ * Exits in case of error.
+ */
+void get_blkdev_info(int fd, struct blkdev_info *blkdev_info)
+{
+    blkdev_info->block_size = get_physical_block_size(fd);
+    blkdev_info->dev_size = get_dev_size(fd);
+    blkdev_info->num_blocks = blkdev_info->dev_size / blkdev_info->block_size;
+
+    if (blkdev_info->dev_size < blkdev_info->block_size)
+    {
+        fprintf(stderr,
+                "error: block size (%u) is greater than device itself (%" PRIu64 ")\n",
+                blkdev_info->block_size,
+                blkdev_info->dev_size);
+        exit(1);
+    }
+
+    blkdev_info->alignment = get_readbuf_align(fd);
+}
+
+
+
+/*
+ * Run benchmarks on a block device and get results.
+ *
+ * Receives an open file descriptor of the block device to be tested, and a
+ * pointer to a struct benchmark_results where the results will be stored.
+ */
+void benchmark(int fd, struct benchmark_results *res)
+{
+    get_blkdev_info(fd, &res->dev_info);
+
+    res->block_read_time = get_block_read_time(fd, &res->dev_info, &res->seq_read_bytes, &res->seq_read_time);
+
+    init_randomness();
+    res->seek_time = get_seek_time(fd, &res->dev_info, res->block_read_time, &res->total_randaccess_time);
+}
+
+
+
+/*
+ * Print benchmark results.
+ *
+ * Receives the path of the tested block device, and a struct benchmark_results
+ * containing the results to be printed.
+ */
+void print_benchmarks(const char *path, const struct benchmark_results *res)
+{
+    /* device size in MiB (divide before converting, to help avoid overflow) */
+    const long double dev_size_mib = (long double)(res->dev_info.dev_size / 1024) / 1024;
+    /* sequential read speed in MiB/s */
+    const long double seq_read_speed = ((long double)res->seq_read_bytes / res->seq_read_time) / MIB;
+    /* amount of data read sequentially in MiB */
+    const long double seq_read_mib = (long double)res->seq_read_bytes / MIB;
+    /* time it takes to read 1 physical block, in ms */
+    const long double block_read_ms = res->block_read_time * 1000;
+    /* total time spent actually reading data, while doing random access reads */
+    const long double randaccess_reading_time = res->block_read_time * NUM_SEEKS;
+    /* total time spent seeking, while doing random access reads */
+    const long double randaccess_seeking_time = res->total_randaccess_time - randaccess_reading_time;
+    /* average seek time in ms */
+    const long double seek_time_ms = res->seek_time * 1000;
+    const long double seeks_per_second = 1 / res->seek_time;
+    /* time measurement tolerance in ms */
+    const long double timing_tolerance_ms = get_timing_tolerance() * 1000;
 
     printf("\n"
            "%s:\n"
@@ -467,43 +556,45 @@ void benchmark(int fd, const char *path)
            "\n"
            " Minimum time measurement error: +/- %Lf ms\n",
            path,
-           block_size,
-           (long double)(dev_size / 1024) / 1024,
-           num_blocks,
-           dev_size,
-           ((long double)seq_read_bytes / seq_read_time) / (1024 * 1024),
-           (long double)seq_read_bytes / (1024 * 1024),
-           seq_read_time,
-           block_read_time * 1000,
-           total_seek_time,
-           block_read_time * NUM_SEEKS,
-           total_seek_time - block_read_time * NUM_SEEKS,
-           seek_time * 1000,
-           1 / seek_time,
-           get_timing_error() * 1000);
-
+           res->dev_info.block_size,
+           dev_size_mib,
+           res->dev_info.num_blocks,
+           res->dev_info.dev_size,
+           seq_read_speed,
+           seq_read_mib,
+           res->seq_read_time,
+           block_read_ms,
+           res->total_randaccess_time,
+           randaccess_reading_time,
+           randaccess_seeking_time,
+           seek_time_ms,
+           seeks_per_second,
+           timing_tolerance_ms);
 }
 
 
 int main(int argc, char **argv)
 {
-        int fd;
+    struct benchmark_results results;
+    int fd;
 
-        printf("hdtime 0.1\n"
-               "Copyright (C) 2012 Israel G. Lugo\n"
-               "\n");
+    printf("hdtime 0.1\n"
+           "Copyright (C) 2012 Israel G. Lugo\n"
+           "\n");
 
-        if (argc != 2) {
-                printf("Usage: %s <raw disk device>\n", argv[0]);
-                exit(1);
-        }
+    if (argc != 2) {
+            printf("Usage: %s <raw disk device>\n", argv[0]);
+            exit(1);
+    }
 
-        fd = open(argv[1], O_RDONLY | O_DIRECT | O_SYNC);
-        die_if(fd < 0, "open");
+    fd = open(argv[1], O_RDONLY | O_DIRECT | O_SYNC);
+    die_if(fd < 0, "open");
 
-        benchmark(fd, argv[1]);
+    benchmark(fd, &results);
 
-        close(fd);
+    close(fd);
 
-        return 0;
+    print_benchmarks(argv[1], &results);
+
+    return 0;
 }
