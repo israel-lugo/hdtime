@@ -432,6 +432,9 @@ long double get_seek_time(int fd, const struct blkdev_info *blkdev_info,
 
     buffer = allocate_aligned_memory(blkdev_info->alignment, block_size);
 
+    printf("Performing %u random reads, please wait a few seconds...\n",
+           NUM_SEEKS);
+
     start = get_cur_timestamp();
     for (i=0; i<NUM_SEEKS; i++)
     {
@@ -505,9 +508,6 @@ void benchmark(int fd, struct benchmark_results *res)
     get_blkdev_info(fd, &res->dev_info);
 
     res->block_read_time = get_block_read_time(fd, &res->dev_info, &res->seq_read_bytes, &res->seq_read_time);
-
-    printf("Performing %u random reads, please wait a few seconds...\n",
-           NUM_SEEKS);
 
     init_randomness();
     res->seek_time = get_seek_time(fd, &res->dev_info, res->block_read_time, &res->total_randaccess_time);
