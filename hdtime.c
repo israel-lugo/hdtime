@@ -494,6 +494,12 @@ void get_blkdev_info(int fd, struct blkdev_info *blkdev_info)
 
 
 
+/*
+ * Run benchmarks on a block device and get results.
+ *
+ * Receives an open file descriptor of the block device to be tested, and a
+ * pointer to a struct benchmark_results where the results will be stored.
+ */
 void benchmark(int fd, struct benchmark_results *res)
 {
     get_blkdev_info(fd, &res->dev_info);
@@ -509,6 +515,12 @@ void benchmark(int fd, struct benchmark_results *res)
 
 
 
+/*
+ * Print benchmark results.
+ *
+ * Receives the path of the tested block device, and a struct benchmark_results
+ * containing the results to be printed.
+ */
 void print_benchmarks(const char *path, const struct benchmark_results *res)
 {
     /* device size in MiB (divide before converting, to help avoid overflow) */
