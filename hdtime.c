@@ -384,40 +384,47 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
  * Get a block device's average block read time, in nanoseconds.
  *
  * Does a sequencial read test on a block device, to find its average read
- * speed. Receives the file descriptor of the block device and a pointer to a
- * struct with information about the device. p_total_bytes, if non-NULL, should
- * point to an unsigned int which will be set to the total amount of bytes read
- * from the device. p_total_read_ns, if non-NULL, should point to a uint64_t
- * which will be set to the amount of time that was spent reading, in
- * nanoseconds.
+ * speed. Receives the file descriptor of the block device, the desired read
+ * size, and a pointer to a struct with information about the device.
+ *
+ * The desired read size will be rounded up to the nearest multiple of
+ * blkdev_info->alignment.
+ *
+ * Two sequential read operations will be performed; one at the logical
+ * beginning of the device, and one at the logical end.
+ *
+ * p_total_bytes, if non-NULL, should point to an unsigned int which will be
+ * set to the total amount of bytes read from the device. p_total_read_ns, if
+ * non-NULL, should point to a uint64_t which will be set to the amount of time
+ * that was spent reading, in nanoseconds.
  *
  * Returns the average time it takes to read a single block of the device, in
  * nanoseconds. Exits in case of error.
  */
 uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
-        unsigned int *p_total_bytes, uint64_t *p_total_read_ns)
+        size_t read_size, unsigned int *p_total_bytes, uint64_t *p_total_read_ns)
 {
-    size_t read_size = align_ceil(SEQ_READ_BYTES, blkdev_info->alignment);
+    size_t aligned_read_size = align_ceil(read_size, blkdev_info->alignment);
     char *buffer;
     struct timespec start, end;
     uint64_t delta_ns;
 
-    assert(read_size % blkdev_info->alignment == 0);
+    assert(aligned_read_size % blkdev_info->alignment == 0);
 
-    if (read_size > blkdev_info->dev_size)
+    if (aligned_read_size > blkdev_info->dev_size)
     {
-        read_size = blkdev_info->dev_size;
+        aligned_read_size = blkdev_info->dev_size;
     }
 
     /* two reads: beginning and end of the device */
     printf("Reading %.2f MiB to determine sequential read time, please wait...\n",
-           (double)read_size / MIB * 2);
+           (double)aligned_read_size / MIB * 2);
 
-    buffer = allocate_aligned_memory(blkdev_info->alignment, read_size);
+    buffer = allocate_aligned_memory(blkdev_info->alignment, aligned_read_size);
 
     get_cur_timestamp(&start);
-    read_at(fd, buffer, read_size, 0);
-    read_at(fd, buffer, read_size, blkdev_info->dev_size - read_size);
+    read_at(fd, buffer, aligned_read_size, 0);
+    read_at(fd, buffer, aligned_read_size, blkdev_info->dev_size - aligned_read_size);
     get_cur_timestamp(&end);
 
     free(buffer);
@@ -425,12 +432,12 @@ uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
     delta_ns = timespec_diff_ns(&end, &start);
 
     if (p_total_bytes != NULL)
-        *p_total_bytes = read_size * 2;
+        *p_total_bytes = aligned_read_size * 2;
 
     if (p_total_read_ns != NULL)
         *p_total_read_ns = delta_ns;
 
-    return delta_ns / ((read_size * 2) / blkdev_info->block_size);
+    return delta_ns / ((aligned_read_size * 2) / blkdev_info->block_size);
 }
 
 
@@ -440,33 +447,36 @@ uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
  *
  * Does a random access read test on a block device, to find its average seek
  * time. Receives the file descriptor of the block device, a pointer to a
- * struct with information about the device, and the amount of time it takes to
- * read a single block of the device, in nanoseconds. p_total_ns, if non-NULL,
- * should point to a uint64_t which will be set to the amount of time that
- * was spent seeking and reading block data, in nanoseconds.
+ * struct with information about the device, the number of seeks to be
+ * performed, and the amount of time it takes to read a single block of the
+ * device, in nanoseconds. p_total_ns, if non-NULL, should point to a uint64_t
+ * which will be set to the amount of time that was spent seeking and reading
+ * block data, in nanoseconds.
  *
  * Returns the average seek time of the block device, in nanoseconds. Exits in
  * case of error.  Requires randomness to be previously initialized (call
  * init_randomness).
  */
 uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
-        uint64_t block_read_ns, uint64_t *p_total_ns)
+        unsigned int num_seeks, uint64_t block_read_ns, uint64_t *p_total_ns)
 {
     const unsigned int block_size = blkdev_info->block_size;
     const uint64_t num_blocks = blkdev_info->num_blocks;
-    const uint64_t time_spent_reading_ns = block_read_ns * NUM_SEEKS;
+    const uint64_t time_spent_reading_ns = block_read_ns * num_seeks;
     struct timespec start, end;
     uint64_t delta_ns;
     char *buffer;
     int i;
 
+    assert(num_seeks > 0);
+
     buffer = allocate_aligned_memory(blkdev_info->alignment, block_size);
 
     printf("Performing %u random reads, please wait a few seconds...\n",
-           NUM_SEEKS);
+           num_seeks);
 
     get_cur_timestamp(&start);
-    for (i=0; i<NUM_SEEKS; i++)
+    for (i=0; i<num_seeks; i++)
     {
         uint64_t block_idx = random64() % num_blocks;
 
@@ -483,7 +493,7 @@ uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
 
     /* protect against integer underflow, if we didn't measure any seek time */
     return (delta_ns > time_spent_reading_ns)
-           ? (delta_ns - time_spent_reading_ns) / NUM_SEEKS
+           ? (delta_ns - time_spent_reading_ns) / num_seeks
            : 0;
 }
 
@@ -540,10 +550,12 @@ void benchmark(int fd, struct benchmark_results *res)
 {
     get_blkdev_info(fd, &res->dev_info);
 
-    res->block_read_ns = get_block_read_ns(fd, &res->dev_info, &res->seq_read_bytes, &res->seq_read_ns);
+    res->block_read_ns = get_block_read_ns(fd, &res->dev_info, SEQ_READ_BYTES,
+            &res->seq_read_bytes, &res->seq_read_ns);
 
     init_randomness();
-    res->seek_ns = get_seek_ns(fd, &res->dev_info, res->block_read_ns, &res->total_randaccess_ns);
+    res->seek_ns = get_seek_ns(fd, &res->dev_info, NUM_SEEKS,
+            res->block_read_ns, &res->total_randaccess_ns);
 }
 
 
