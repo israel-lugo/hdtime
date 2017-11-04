@@ -7,7 +7,8 @@ LDLIBS = -lrt
 
 all: hdtime
 
-hdtime: hdtime.o
+hdtime: benchmarks.o cli.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LOADLIBES) $(LDLIBS)
 
 clean:
-	rm -f hdtime hdtime.o
+	rm -f hdtime benchmarks.o cli.o

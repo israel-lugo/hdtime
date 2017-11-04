@@ -19,6 +19,8 @@
  */
 
 
+/* benchmarks.c - benchmark-running module */
+
 
 #define _LARGEFILE64_SOURCE
 #define _GNU_SOURCE
@@ -225,7 +227,8 @@ static inline uint64_t timespec_to_ns(const struct timespec *ts)
  * represented as an uint64_t. May have undefined behavior if t0 is greater
  * than t1, due to integer overflow.
  */
-uint64_t timespec_diff_ns(const struct timespec *t1, const struct timespec *t0)
+static uint64_t timespec_diff_ns(const struct timespec *t1,
+        const struct timespec *t0)
 {
     return timespec_to_ns(t1) - timespec_to_ns(t0);
 }
@@ -236,7 +239,7 @@ uint64_t timespec_diff_ns(const struct timespec *t1, const struct timespec *t0)
  * Get a device's physical block size. Receives an open file descriptor for the
  * device. Exits in case of error.
  */
-unsigned int get_physical_block_size(int fd)
+static unsigned int get_physical_block_size(int fd)
 {
     unsigned int block_size;
     int retval;
@@ -256,7 +259,7 @@ unsigned int get_physical_block_size(int fd)
  * system. In case of error or unspecified alignment, assumes fd is a block
  * device and falls back to checking its block size.
  */
-size_t get_readbuf_align(int fd)
+static size_t get_readbuf_align(int fd)
 {
     long align_l;
 
@@ -284,7 +287,7 @@ size_t get_readbuf_align(int fd)
  * Get the size of a device. Receives an open file descriptor for the device.
  * Exits in case of error.
  */
-uint64_t get_dev_size(int fd)
+static uint64_t get_dev_size(int fd)
 {
     uint64_t size;
     int retval;
@@ -300,7 +303,7 @@ uint64_t get_dev_size(int fd)
 /*
  * Wrapper for read() that does an lseek first. Exits in case of error.
  */
-void read_at(int fd, void *buffer, size_t count, off64_t offset)
+static void read_at(int fd, void *buffer, size_t count, off64_t offset)
 {
     off64_t seek_ok;
     ssize_t read_ok;
@@ -320,7 +323,7 @@ void read_at(int fd, void *buffer, size_t count, off64_t offset)
  * The time value is relative to some unspecified starting point; useful for
  * relative time calculations (timing measurements).
  */
-void get_cur_timestamp(struct timespec *now)
+static void get_cur_timestamp(struct timespec *now)
 {
     int retval;
 
@@ -335,7 +338,7 @@ void get_cur_timestamp(struct timespec *now)
  * time delta. Returns half the maximum error in nanoseconds; the actual
  * tolerance is +/- the returned value.
  */
-uint64_t get_timing_tolerance_ns(void)
+static uint64_t get_timing_tolerance_ns(void)
 {
     struct timespec res;
     int retval;
@@ -401,7 +404,7 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
  * Returns the average time it takes to read a single block of the device, in
  * nanoseconds. Exits in case of error.
  */
-uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
+static uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
         size_t read_size, unsigned int *p_total_bytes, uint64_t *p_total_read_ns)
 {
     size_t aligned_read_size = align_ceil(read_size, blkdev_info->alignment);
@@ -457,7 +460,7 @@ uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
  * case of error.  Requires randomness to be previously initialized (call
  * init_randomness).
  */
-uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
+static uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
         unsigned int num_seeks, uint64_t block_read_ns, uint64_t *p_total_ns)
 {
     const unsigned int block_size = blkdev_info->block_size;
@@ -520,7 +523,7 @@ static void init_randomness(void)
  *
  * Exits in case of error.
  */
-void get_blkdev_info(int fd, struct blkdev_info *blkdev_info)
+static void get_blkdev_info(int fd, struct blkdev_info *blkdev_info)
 {
     blkdev_info->block_size = get_physical_block_size(fd);
     blkdev_info->dev_size = get_dev_size(fd);
@@ -546,7 +549,7 @@ void get_blkdev_info(int fd, struct blkdev_info *blkdev_info)
  * Receives an open file descriptor of the block device to be tested, and a
  * pointer to a struct benchmark_results where the results will be stored.
  */
-void benchmark(int fd, struct benchmark_results *res)
+static void run_benchmarks(int fd, struct benchmark_results *res)
 {
     get_blkdev_info(fd, &res->dev_info);
 
@@ -566,7 +569,7 @@ void benchmark(int fd, struct benchmark_results *res)
  * Receives the path of the tested block device, and a struct benchmark_results
  * containing the results to be printed.
  */
-void print_benchmarks(const char *path, const struct benchmark_results *res)
+static void print_benchmarks(const char *path, const struct benchmark_results *res)
 {
     /* device size in MiB (divide before converting, to help avoid overflow) */
     const long double dev_size_mib = (long double)(res->dev_info.dev_size / 1024) / 1024;
@@ -623,28 +626,19 @@ void print_benchmarks(const char *path, const struct benchmark_results *res)
 }
 
 
-int main(int argc, char **argv)
+void run_and_print_benchmarks(const char *devname)
 {
     struct benchmark_results results;
     int fd;
 
-    printf("hdtime 0.1\n"
-           "Copyright (C) 2012 Israel G. Lugo\n"
-           "\n");
-
-    if (argc != 2) {
-            printf("Usage: %s <raw disk device>\n", argv[0]);
-            exit(1);
-    }
-
-    fd = open(argv[1], O_RDONLY | O_DIRECT | O_SYNC);
+    fd = open(devname, O_RDONLY | O_DIRECT | O_SYNC);
     die_if(fd < 0, "open");
 
-    benchmark(fd, &results);
+    run_benchmarks(fd, &results);
 
     close(fd);
 
-    print_benchmarks(argv[1], &results);
-
-    return 0;
+    print_benchmarks(devname, &results);
 }
+
+/* vim: set expandtab smarttab shiftwidth=4 softtabstop=4 tw=75 : */
