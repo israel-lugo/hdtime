@@ -19,6 +19,8 @@
  */
 
 
+/* benchmarks.c - benchmark-running module */
+
 
 #define _LARGEFILE64_SOURCE
 #define _GNU_SOURCE
@@ -624,28 +626,19 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
 }
 
 
-int main(int argc, char **argv)
+void run_and_print_benchmarks(const char *devname)
 {
     struct benchmark_results results;
     int fd;
 
-    printf("hdtime 0.1\n"
-           "Copyright (C) 2012 Israel G. Lugo\n"
-           "\n");
-
-    if (argc != 2) {
-            printf("Usage: %s <raw disk device>\n", argv[0]);
-            exit(1);
-    }
-
-    fd = open(argv[1], O_RDONLY | O_DIRECT | O_SYNC);
+    fd = open(devname, O_RDONLY | O_DIRECT | O_SYNC);
     die_if(fd < 0, "open");
 
     run_benchmarks(fd, &results);
 
     close(fd);
 
-    print_benchmarks(argv[1], &results);
-
-    return 0;
+    print_benchmarks(devname, &results);
 }
+
+/* vim: set expandtab smarttab shiftwidth=4 softtabstop=4 tw=75 : */
