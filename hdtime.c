@@ -547,7 +547,7 @@ static void get_blkdev_info(int fd, struct blkdev_info *blkdev_info)
  * Receives an open file descriptor of the block device to be tested, and a
  * pointer to a struct benchmark_results where the results will be stored.
  */
-static void benchmark(int fd, struct benchmark_results *res)
+static void run_benchmarks(int fd, struct benchmark_results *res)
 {
     get_blkdev_info(fd, &res->dev_info);
 
@@ -641,7 +641,7 @@ int main(int argc, char **argv)
     fd = open(argv[1], O_RDONLY | O_DIRECT | O_SYNC);
     die_if(fd < 0, "open");
 
-    benchmark(fd, &results);
+    run_benchmarks(fd, &results);
 
     close(fd);
 
