@@ -47,12 +47,8 @@
 #endif
 #include <assert.h>
 
-#define NUM_SEEKS 200
 
 #define MIB (1024 * 1024)
-
-/* Amount of bytes to read sequentially in a single block. */
-#define SEQ_READ_BYTES (64 * MIB)
 
 
 #define min(x, y) ({  \
@@ -553,17 +549,18 @@ static void get_blkdev_info(int fd, struct blkdev_info *blkdev_info)
  * Receives an open file descriptor of the block device to be tested, and a
  * pointer to a struct benchmark_results where the results will be stored.
  */
-static void run_benchmarks(int fd, struct benchmark_results *res)
+static void run_benchmarks(int fd, unsigned int num_seeks, size_t read_size,
+        struct benchmark_results *res)
 {
     get_blkdev_info(fd, &res->dev_info);
 
-    res->block_read_ns = get_block_read_ns(fd, &res->dev_info, SEQ_READ_BYTES,
+    res->block_read_ns = get_block_read_ns(fd, &res->dev_info, read_size,
             &res->seq_read_bytes, &res->seq_read_ns);
 
     init_randomness();
-    res->seek_ns = get_seek_ns(fd, &res->dev_info, NUM_SEEKS,
+    res->seek_ns = get_seek_ns(fd, &res->dev_info, num_seeks,
             res->block_read_ns, &res->total_randaccess_ns);
-    res->num_seeks = NUM_SEEKS;
+    res->num_seeks = num_seeks;
 }
 
 
@@ -645,7 +642,8 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
 }
 
 
-void run_and_print_benchmarks(const char *devname)
+void run_and_print_benchmarks(const char *devname, unsigned int num_seeks,
+        size_t read_size)
 {
     struct benchmark_results results;
     int fd;
@@ -653,7 +651,7 @@ void run_and_print_benchmarks(const char *devname)
     fd = open(devname, O_RDONLY | O_DIRECT | O_SYNC);
     die_if(fd < 0, "open");
 
-    run_benchmarks(fd, &results);
+    run_benchmarks(fd, num_seeks, read_size, &results);
 
     close(fd);
 

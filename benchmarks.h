@@ -30,7 +30,11 @@
 #endif
 
 
-void run_and_print_benchmarks(const char *devname);
+/* get size_t */
+#include <stddef.h>
+
+void run_and_print_benchmarks(const char *devname, unsigned int num_seeks,
+        size_t read_size);
 
 
 #endif  /* _BENCHMARKS_H */

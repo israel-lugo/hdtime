@@ -33,6 +33,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <limits.h>
+#include <inttypes.h>
 #include <string.h>
 #include <errno.h>
 #include <libgen.h>
@@ -48,12 +50,23 @@
 #define COPYRIGHT "Copyright (C) 2012 Israel G. Lugo"
 
 
+/* Default value for cli_options.num_seeks. */
+#define DEFAULT_NUM_SEEKS 200
+
+#define MIB (1024 * 1024)
+
+/* Default amount of bytes to read sequentially in a single block. */
+#define DEFAULT_SEQ_READ_BYTES (64 * MIB)
+
+
 /* Program's basename, for printing on error. */
 static const char *prog_name = NULL;
 
 
 struct cli_options {
     const char *devname;
+    unsigned int num_seeks;
+    size_t read_size;
 };
 
 
@@ -65,6 +78,8 @@ struct cli_options {
 static void show_options(void)
 {
     static const struct { const char *name; const char *desc; } opts[] = {
+        { "-c, --read-count=N", "do N random reads in the seek test" },
+        { "-s, --read-size=BYTES", "size of read blocks in the sequential test" },
         { "-h, --help", "display this help and exit" },
         { "-v, --version", "output version information and exit" },
     };
@@ -131,6 +146,48 @@ static void print_help_string(void)
 
 
 /*
+ * Get an uintmax_t from a string argument.
+ *
+ * Parses an option argument from string arg, to retrieve an uintmax_t in
+ * base 10. The value is verified to be between min and max.
+ *
+ * arg_name must be a string description of the option for error message
+ * purposes, e.g. "read block size". help_func, if non-NULL, must be a
+ * pointer to a help function, which will be called after printing the
+ * error message.
+ *
+ * If the argument is invalid (out of bounds or not an unsigned integer),
+ * the function prints an error, calls help_func() and exits the
+ * program.
+ */
+static uintmax_t get_uint_arg(const char *arg, uintmax_t min,
+        uintmax_t max, const char *arg_name, void (*help_func)(void))
+{
+	char *end;
+        uintmax_t result;
+
+        /* set errno to distinguish between overflow and actual UINTMAX_MAX */
+        errno = 0;
+	result = strtoumax(arg, &end, 10);
+
+	if (result < min
+            || result > max
+            || *end != '\0'
+            || (result == UINTMAX_MAX && errno == ERANGE))
+	{
+		fprintf(stderr,
+			"%s: invalid %s given (%" PRIuMAX "..%" PRIuMAX ")\n",
+			prog_name, arg_name, min, max);
+                if (help_func != NULL)
+                    help_func();
+		exit(1);
+	}
+	return result;
+}
+
+
+
+/*
  * Process command-line arguments.
  *
  * Receives the number of arguments (argc), the array of arguments (argv)
@@ -142,20 +199,34 @@ static void parse_args(int argc, char *const argv[],
         struct cli_options *p_cli_options)
 {
     static const struct option long_opts[] = {
+        {"read-count", 1, 0, 'c'},
+        {"read-size", 1, 0, 's'},
         {"help", 0, 0, 'h'},
         {"version", 0, 0, 'v'},
         {0, 0, 0, 0}
     };
 
+    /* initialize defaults */
+    p_cli_options->num_seeks = DEFAULT_NUM_SEEKS;
+    p_cli_options->read_size = DEFAULT_SEQ_READ_BYTES;
+
     for (;;)
     {
-        int arg = getopt_long(argc, argv, "hv", long_opts, NULL);
+        int arg = getopt_long(argc, argv, "c:s:hv", long_opts, NULL);
 
         if (arg == -1)
             break;
 
         switch (arg)
         {
+            case 'c':   /* --read-count <n> */
+                p_cli_options->num_seeks = (unsigned int)get_uint_arg(optarg,
+                        1, UINT_MAX, "read count", print_help_string);
+                break;
+            case 's':   /* --read-size <bytes> */
+                p_cli_options->read_size = (size_t)get_uint_arg(optarg, 1,
+                        SIZE_MAX, "read block size", print_help_string);
+                break;
             case 'h':   /* --help */
                 show_usage();
                 exit(0);
@@ -187,7 +258,8 @@ int main(int argc, char *argv[])
 
     parse_args(argc, argv, &cli_options);
 
-    run_and_print_benchmarks(cli_options.devname);
+    run_and_print_benchmarks(cli_options.devname, cli_options.num_seeks,
+            cli_options.read_size);
 
     exit(0);
 }
