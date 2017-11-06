@@ -597,7 +597,10 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
     const long double total_randaccess_time = (long double)res->total_randaccess_ns / 1000000000L;
 
     /* total time spent seeking in seconds, while doing random access reads */
-    const long double randaccess_seeking_time = (long double)(res->total_randaccess_ns - randaccess_reading_ns) / 1000000000L;
+    const long double randaccess_seeking_time = 
+        res->total_randaccess_ns > randaccess_reading_ns
+        ? (long double)(res->total_randaccess_ns - randaccess_reading_ns) / 1000000000L
+        : 0.0L;
 
     /* average seek time in ms */
     const long double seek_time_ms = (long double)res->seek_ns / 1000000L;
