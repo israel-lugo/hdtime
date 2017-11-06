@@ -481,6 +481,9 @@ static uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
     get_cur_timestamp(&start);
     for (i=0; i<num_seeks; i++)
     {
+        /* TODO: We shouldn't include the time it takes to generate a
+         * random number in the measurements. Take granular measurements
+         * around the read_at, and accumulate the values. */
         uint64_t block_idx = random64() % num_blocks;
 
         read_at(fd, buffer, block_size, block_idx * block_size);
