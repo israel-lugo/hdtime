@@ -576,24 +576,35 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
 {
     /* device size in MiB (divide before converting, to help avoid overflow) */
     const long double dev_size_mib = (long double)(res->dev_info.dev_size / 1024) / 1024;
+
     /* sequential read time in seconds (divide before converting, to avoid overflow) */
     const long double seq_read_time = (long double)(res->seq_read_ns / 1000000L) / 1000;
+
     /* sequential read speed in MiB/s */
     const long double seq_read_speed = ((long double)res->seq_read_bytes / seq_read_time) / MIB;
+
     /* amount of data read sequentially in MiB */
     const long double seq_read_mib = (long double)res->seq_read_bytes / MIB;
+
     /* time it takes to read 1 physical block, in ms */
     const long double block_read_ms = (long double)res->block_read_ns / 1000000L;
+
     /* total time spent actually reading data, while doing random access reads */
     const uint64_t randaccess_reading_ns = res->block_read_ns * NUM_SEEKS;
+
     const long double randaccess_reading_time = (long double)randaccess_reading_ns / 1000000000L;
+
     const long double total_randaccess_time = (long double)res->total_randaccess_ns / 1000000000L;
+
     /* total time spent seeking in seconds, while doing random access reads */
     const long double randaccess_seeking_time = (long double)(res->total_randaccess_ns - randaccess_reading_ns) / 1000000000L;
+
     /* average seek time in ms */
     const long double seek_time_ms = (long double)res->seek_ns / 1000000L;
+
     /* 1 / (seek_ns / 1000000000L) == 1000000000L / seek_ns*/
     const long double seeks_per_second = 1000000000L / (long double)res->seek_ns;
+
     /* time measurement tolerance in ms */
     const long double timing_tolerance_ms = (long double)get_timing_tolerance_ns() / 1000000L;
 
