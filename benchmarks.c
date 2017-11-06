@@ -86,6 +86,7 @@ struct benchmark_results {
     char *path;
     struct blkdev_info dev_info;
     unsigned int seq_read_bytes;
+    unsigned int num_seeks;
     uint64_t seq_read_ns;
     uint64_t block_read_ns;
     uint64_t total_randaccess_ns;
@@ -562,6 +563,7 @@ static void run_benchmarks(int fd, struct benchmark_results *res)
     init_randomness();
     res->seek_ns = get_seek_ns(fd, &res->dev_info, NUM_SEEKS,
             res->block_read_ns, &res->total_randaccess_ns);
+    res->num_seeks = NUM_SEEKS;
 }
 
 
@@ -590,7 +592,7 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
     const long double block_read_ms = (long double)res->block_read_ns / 1000000L;
 
     /* total time spent actually reading data, while doing random access reads */
-    const uint64_t randaccess_reading_ns = res->block_read_ns * NUM_SEEKS;
+    const uint64_t randaccess_reading_ns = res->block_read_ns * res->num_seeks;
 
     const long double randaccess_reading_time = (long double)randaccess_reading_ns / 1000000000L;
 
