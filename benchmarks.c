@@ -469,7 +469,7 @@ static uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
     struct timespec start, end;
     uint64_t delta_ns;
     char *buffer;
-    int i;
+    unsigned int i;
 
     assert(num_seeks > 0);
 
