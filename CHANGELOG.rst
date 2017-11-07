@@ -10,6 +10,16 @@ Unreleased__
 ------------
 __ https://github.com/israel-lugo/hdtime/compare/v0.1.0...HEAD
 
+Added
+.....
+
+- New command-line option ``--read-count``. Controls how many random reads to
+  do in the seek test.
+
+- New command-line option ``--read-size``. Controls the size of the read blocks
+  in the sequential read test.
+
+
 Fixed
 .....
 
