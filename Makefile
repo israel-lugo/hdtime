@@ -5,10 +5,12 @@ CFLAGS ?= -O2
 # librt required for clock_gettime and clock_getres, prior to glibc 2.17
 LDLIBS = -lrt
 
+hdtime_objs = benchmarks.o cli.o
+
 all: hdtime
 
-hdtime: benchmarks.o cli.o
+hdtime: $(hdtime_objs)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LOADLIBES) $(LDLIBS)
 
 clean:
-	rm -f hdtime benchmarks.o cli.o
+	rm -f hdtime $(hdtime_objs)
