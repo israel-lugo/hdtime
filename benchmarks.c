@@ -47,8 +47,7 @@
 #endif
 #include <assert.h>
 
-
-#define MIB (1024 * 1024)
+#include "humanize.h"
 
 
 #define min(x, y) ({  \
@@ -416,9 +415,11 @@ static uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
         aligned_read_size = blkdev_info->dev_size;
     }
 
+    const struct human_value total_read = humanize_binary_size(aligned_read_size*2);
+
     /* two reads: beginning and end of the device */
-    printf("Reading %.2f MiB to determine sequential read time, please wait...\n",
-           (double)aligned_read_size / MIB * 2);
+    printf("Reading %.2Lf %s to determine sequential read time, please wait...\n",
+           total_read.value, total_read.unit);
 
     buffer = allocate_aligned_memory(blkdev_info->alignment, aligned_read_size);
 
@@ -573,20 +574,20 @@ static void run_benchmarks(int fd, unsigned int num_seeks, size_t read_size,
  */
 static void print_benchmarks(const char *path, const struct benchmark_results *res)
 {
-    /* device size in MiB (divide before converting, to help avoid overflow) */
-    const long double dev_size_mib = (long double)(res->dev_info.dev_size / 1024) / 1024;
+    /* device size, in human terms */
+    const struct human_value dev_size = humanize_binary_size(res->dev_info.dev_size);
+
+    /* total amount of data read sequentially, in human terms */
+    const struct human_value seq_read_total = humanize_binary_size(res->seq_read_bytes);
 
     /* sequential read time in seconds (divide before converting, to avoid overflow) */
     const long double seq_read_time = (long double)(res->seq_read_ns / 1000000L) / 1000;
 
-    /* sequential read speed in MiB/s */
-    const long double seq_read_speed = ((long double)res->seq_read_bytes / seq_read_time) / MIB;
-
-    /* amount of data read sequentially in MiB */
-    const long double seq_read_mib = (long double)res->seq_read_bytes / MIB;
-
     /* time it takes to read 1 physical block, in ms */
     const long double block_read_ms = (long double)res->block_read_ns / 1000000L;
+
+    /* sequential read speed in human terms */
+    const struct human_value seq_read_speed = humanize_binary_speed(res->seq_read_bytes / seq_read_time);
 
     /* total time spent actually reading data, while doing random access reads */
     const uint64_t randaccess_reading_ns = res->block_read_ns * res->num_seeks;
@@ -594,6 +595,7 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
     const long double randaccess_reading_time = (long double)randaccess_reading_ns / 1000000000L;
 
     const long double total_randaccess_time = (long double)res->total_randaccess_ns / 1000000000L;
+
 
     /* total time spent seeking in seconds, while doing random access reads */
     const long double randaccess_seeking_time = 
@@ -613,9 +615,9 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
     printf("\n"
            "%s:\n"
            " Physical block size: %u bytes\n"
-           " Device size: %.2Lf MiB (%" PRIu64 " blocks, %" PRIu64 " bytes)\n"
+           " Device size: %.2Lf %s (%" PRIu64 " blocks, %" PRIu64 " bytes)\n"
            "\n"
-           " Sequential read speed: %.2Lf MiB/s (%.2Lf MiB in %.6Lf s)\n"
+           " Sequential read speed: %.2Lf %s (%.2Lf %s in %.6Lf s)\n"
            " Average time to read 1 physical block: %Lf ms\n"
            " Total time spent doing random reads: %.6Lf s\n"
            "   estimated time spent actually reading data inside the blocks: %.6Lf s\n"
@@ -626,11 +628,11 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
            " Minimum time measurement error: +/- %Lf ms\n",
            path,
            res->dev_info.block_size,
-           dev_size_mib,
+           dev_size.value, dev_size.unit,
            res->dev_info.num_blocks,
            res->dev_info.dev_size,
-           seq_read_speed,
-           seq_read_mib,
+           seq_read_speed.value, seq_read_speed.unit,
+           seq_read_total.value, seq_read_total.unit,
            seq_read_time,
            block_read_ms,
            total_randaccess_time,
