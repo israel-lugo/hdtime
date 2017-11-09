@@ -126,7 +126,56 @@ struct human_value humanize_binary_speed(uint64_t x)
 }
 
 
-/* TODO: Humanize time values. */
+/* Used by humanize_time */
+#define SCALE_NS 1ULL
+#define SCALE_US (1000*SCALE_NS)
+#define SCALE_MS (1000*SCALE_US)
+#define SCALE_S (1000*SCALE_MS)
+#define SCALE_MIN (60*SCALE_S)
+#define SCALE_HOUR (60*SCALE_MIN)
+#define SCALE_DAY (24*SCALE_HOUR)
+#define SCALE_YEAR (365*SCALE_DAY)
+#define SCALE_MONTH (SCALE_YEAR/12)
+
+
+/*
+ * Humanize an amount of time, which is given in nanoseconds.
+ *
+ * Receives an amount of nanoseconds, and returns a strut human_time_value
+ * containing the individual fields (years, months, and so on).
+ */
+struct human_time_value humanize_time(uint64_t nanoseconds)
+{
+    struct human_time_value v;
+
+    v.years = nanoseconds / SCALE_YEAR;
+    const uint64_t without_years = nanoseconds % SCALE_YEAR;
+
+    v.months = without_years / SCALE_MONTH;
+    const uint64_t without_months = without_years % SCALE_MONTH;
+
+    v.days = without_months / SCALE_DAY;
+    const uint64_t without_days = without_months % SCALE_DAY;
+
+    v.hours = without_days / SCALE_HOUR;
+    const uint64_t without_hours = without_days % SCALE_HOUR;
+
+    v.minutes = without_hours / SCALE_MIN;
+    const uint64_t without_minutes = without_hours % SCALE_MIN;
+
+    v.seconds = without_minutes / SCALE_S;
+    const uint64_t without_seconds = without_minutes % SCALE_S;
+
+    v.miliseconds = without_seconds / SCALE_MS;
+    const uint64_t without_miliseconds = without_seconds % SCALE_MS;
+
+    v.microseconds = without_miliseconds / SCALE_US;
+    const uint64_t without_microseconds = without_miliseconds % SCALE_US;
+
+    v.nanoseconds = without_microseconds / SCALE_NS;
+
+    return v;
+}
 
 
 /* vim: set expandtab smarttab shiftwidth=4 softtabstop=4 tw=75 : */

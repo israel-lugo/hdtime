@@ -39,6 +39,18 @@ struct human_value {
     const char *unit;
 };
 
+struct human_time_value {
+    unsigned int years;
+    unsigned int months;
+    unsigned int days;
+    unsigned int hours;
+    unsigned int minutes;
+    unsigned int seconds;
+    unsigned int miliseconds;
+    unsigned int microseconds;
+    unsigned int nanoseconds;
+};
+
 
 void humanize_value(uint64_t x, unsigned int ratio, const char *const *units,
         unsigned int num_units, long double *result, const char **unit);
@@ -46,5 +58,7 @@ void humanize_value(uint64_t x, unsigned int ratio, const char *const *units,
 struct human_value humanize_binary_size(uint64_t x);
 
 struct human_value humanize_binary_speed(uint64_t x);
+
+struct human_time_value humanize_time(uint64_t nanoseconds);
 
 #endif  /* _HUMANIZE_H */
