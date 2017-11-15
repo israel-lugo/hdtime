@@ -65,7 +65,7 @@ int join_nonempty(char **joined, char *const strings[], int count, const char *s
 
 char *format_time_value(const struct human_time_value *v, int seconds_precision);
 
-char *humanize_time(uint64_t nanoseconds);
+char *humanize_time(uint64_t nanoseconds, int seconds_precision);
 
 
 #endif  /* _HUMANIZE_H */

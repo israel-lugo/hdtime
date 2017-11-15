@@ -359,15 +359,19 @@ char *format_time_value(const struct human_time_value *v, int seconds_precision)
  * Receives an amount of time, in nanoseconds. Returns a newly allocated
  * string, with a human representation of the specified time interval.
  *
+ * seconds_precision specifies the number of decimal digits for the seconds
+ * and fractions of seconds. This value is ignored if the seconds and
+ * fractions are only composed of nanoseconds, as this function does not
+ * have sub-ns precision.
+ *
  * The string is allocated with malloc(). It should be freed once no longer
  * necessary.
  */
-char *humanize_time(uint64_t nanoseconds)
+char *humanize_time(uint64_t nanoseconds, int seconds_precision)
 {
     struct human_time_value t = split_time(nanoseconds);
 
-    /* enough precision digits to hold s.mmmuuunnn */
-    return format_time_value(&t, 3);
+    return format_time_value(&t, seconds_precision);
 }
 
 
