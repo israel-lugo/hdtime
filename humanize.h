@@ -40,7 +40,7 @@ struct human_value {
 };
 
 struct human_time_value {
-    unsigned int years;
+    unsigned int years;         /* guaranteed by C99 to hold at least 65535 */
     unsigned int months;
     unsigned int days;
     unsigned int hours;
@@ -59,6 +59,13 @@ struct human_value humanize_binary_size(uint64_t x);
 
 struct human_value humanize_binary_speed(uint64_t x);
 
-struct human_time_value humanize_time(uint64_t nanoseconds);
+struct human_time_value split_time(uint64_t nanoseconds);
+
+int join_nonempty(char **joined, char *const strings[], int count, const char *sep);
+
+char *format_time_value(const struct human_time_value *v, int seconds_precision);
+
+char *humanize_time(uint64_t nanoseconds);
+
 
 #endif  /* _HUMANIZE_H */
