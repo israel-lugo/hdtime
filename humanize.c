@@ -244,8 +244,8 @@ static void nonzero_value_to_str(char *buf, size_t size, unsigned int value,
  *
  * Returns the number of non-empty strings that were joined (which may be
  * zero if all strings were empty), or a negative number in case of memory
- * error. If all strings were empty, or in case of error, nothing is stored
- * in the location pointed-to by joined.
+ * error. If all strings were empty, or in case of error, the location
+ * pointed-to by joined is set to NULL.
  */
 int join_nonempty(char **joined, char *const strings[], int count, const char *sep)
 {
@@ -322,7 +322,6 @@ char *format_time_value(const struct human_time_value *v, int seconds_precision)
     long double seconds_and_fractions;
     const char *seconds_unit;
     char *str;
-    int status;
 
     nonzero_value_to_str(bufs.years, sizeof(bufs.years), v->years, "years");
     nonzero_value_to_str(bufs.months, sizeof(bufs.months), v->months, "months");
@@ -348,10 +347,7 @@ char *format_time_value(const struct human_time_value *v, int seconds_precision)
     snprintf(bufs.seconds_and_fractions, sizeof(bufs.seconds_and_fractions),
             "%.*Lf %s", seconds_precision, seconds_and_fractions, seconds_unit);
 
-    status = join_nonempty(&str, strings, sizeof(strings)/sizeof(strings[0]), sep);
-
-    /* at least the seconds_and_fractions component should be nonempty */
-    assert(status != 0);
+    (void)join_nonempty(&str, strings, sizeof(strings)/sizeof(strings[0]), sep);
 
     return str;
 }
