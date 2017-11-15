@@ -124,10 +124,10 @@ struct human_value humanize_binary_size(uint64_t x)
 
 
 /*
- * Humanize a speed which is given in bytes.
+ * Humanize a speed which is given in bytes per second.
  *
- * Receives the speed in bytes. Returns a struct human_value containing the
- * humanized speed value and its unit.
+ * Receives the speed in bytes per second. Returns a struct human_value
+ * containing the humanized speed value and its unit.
  *
  * The unit string is statically allocated and must not be freed nor
  * modified in any way.
