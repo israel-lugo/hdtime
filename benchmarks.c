@@ -580,52 +580,54 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
     /* total amount of data read sequentially, in human terms */
     const struct human_value seq_read_total = humanize_binary_size(res->seq_read_bytes);
 
-    /* sequential read time in seconds (divide before converting, to avoid overflow) */
-    const long double seq_read_time = (long double)(res->seq_read_ns / 1000000L) / 1000;
+    /* sequential read time in human terms */
+    char *const seq_read_time = humanize_time(res->seq_read_ns, 3);
 
-    /* time it takes to read 1 physical block, in ms */
-    const long double block_read_ms = (long double)res->block_read_ns / 1000000L;
+    /* time it takes to read 1 physical block, in human terms */
+    char *const block_read_time = humanize_time(res->block_read_ns, 3);
 
     /* sequential read speed in human terms */
-    const struct human_value seq_read_speed = humanize_binary_speed(res->seq_read_bytes / seq_read_time);
+    /* FIXME: What if we measured 0 ns? Division by zero */
+    const struct human_value seq_read_speed = humanize_binary_speed((long double)res->seq_read_bytes
+            / ((long double)res->seq_read_ns / 1000000000ULL));
 
     /* total time spent actually reading data, while doing random access reads */
     const uint64_t randaccess_reading_ns = res->block_read_ns * res->num_seeks;
+    char *const randaccess_reading_time = humanize_time(randaccess_reading_ns, 3);
 
-    const long double randaccess_reading_time = (long double)randaccess_reading_ns / 1000000000L;
-
-    const long double total_randaccess_time = (long double)res->total_randaccess_ns / 1000000000L;
-
+    /* total time spent in the random access test, in human terms */
+    char *const total_randaccess_time = humanize_time(res->total_randaccess_ns, 3);
 
     /* total time spent seeking in seconds, while doing random access reads */
-    const long double randaccess_seeking_time = 
+    const uint64_t randaccess_seeking_ns =
         res->total_randaccess_ns > randaccess_reading_ns
-        ? (long double)(res->total_randaccess_ns - randaccess_reading_ns) / 1000000000L
-        : 0.0L;
+        ? (res->total_randaccess_ns - randaccess_reading_ns)
+        : 0;
+    char *const randaccess_seeking_time = humanize_time(randaccess_seeking_ns, 3);
 
-    /* average seek time in ms */
-    const long double seek_time_ms = (long double)res->seek_ns / 1000000L;
+    /* average seek time, in human terms */
+    char *const seek_time = humanize_time(res->seek_ns, 3);
 
     /* 1 / (seek_ns / 1000000000L) == 1000000000L / seek_ns*/
     const long double seeks_per_second = 1000000000L / (long double)res->seek_ns;
 
-    /* time measurement tolerance in ms */
-    const long double timing_tolerance_ms = (long double)get_timing_tolerance_ns() / 1000000L;
+    /* time measurement tolerance, in human terms */
+    char *const timing_tolerance = humanize_time(get_timing_tolerance_ns(), 3);
 
     printf("\n"
            "%s:\n"
            " Physical block size: %u bytes\n"
            " Device size: %.2Lf %s (%" PRIu64 " blocks, %" PRIu64 " bytes)\n"
            "\n"
-           " Sequential read speed: %.2Lf %s (%.2Lf %s in %.6Lf s)\n"
-           " Average time to read 1 physical block: %Lf ms\n"
-           " Total time spent doing random reads: %.6Lf s\n"
-           "   estimated time spent actually reading data inside the blocks: %.6Lf s\n"
-           "   estimated time seeking: %.6Lf s\n"
-           " Random access time: %.3Lf ms\n"
+           " Sequential read speed: %.2Lf %s (%.2Lf %s in %s)\n"
+           " Average time to read 1 physical block: %s\n"
+           " Total time spent doing random reads: %s\n"
+           "   estimated time spent actually reading data inside the blocks: %s\n"
+           "   estimated time seeking: %s\n"
+           " Random access time: %s\n"
            " Seeks/second: %.3Lf\n"
            "\n"
-           " Minimum individual time measurement error: +/- %Lf ms\n",
+           " Minimum individual time measurement error: +/- %s\n",
            path,
            res->dev_info.block_size,
            dev_size.value, dev_size.unit,
@@ -634,13 +636,21 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
            seq_read_speed.value, seq_read_speed.unit,
            seq_read_total.value, seq_read_total.unit,
            seq_read_time,
-           block_read_ms,
+           block_read_time,
            total_randaccess_time,
            randaccess_reading_time,
            randaccess_seeking_time,
-           seek_time_ms,
+           seek_time,
            seeks_per_second,
-           timing_tolerance_ms);
+           timing_tolerance);
+
+    free(seq_read_time);
+    free(block_read_time);
+    free(randaccess_reading_time);
+    free(total_randaccess_time);
+    free(randaccess_seeking_time);
+    free(seek_time);
+    free(timing_tolerance);
 }
 
 
