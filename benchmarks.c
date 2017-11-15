@@ -625,7 +625,7 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
            " Random access time: %.3Lf ms\n"
            " Seeks/second: %.3Lf\n"
            "\n"
-           " Minimum time measurement error: +/- %Lf ms\n",
+           " Minimum individual time measurement error: +/- %Lf ms\n",
            path,
            res->dev_info.block_size,
            dev_size.value, dev_size.unit,
