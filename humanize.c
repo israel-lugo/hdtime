@@ -332,7 +332,7 @@ char *format_time_value(const struct human_time_value *v, int seconds_precision)
 
     seconds_and_fractions_ns = v->nanoseconds*SCALE_NS
         + v->microseconds*SCALE_US
-        + v->miliseconds*SCALE_MS 
+        + v->miliseconds*SCALE_MS
         + v->seconds*SCALE_S;
 
     humanize_value(seconds_and_fractions_ns, 1000, SECOND_FRACTION_UNITS,
