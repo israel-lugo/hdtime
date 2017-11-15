@@ -80,7 +80,7 @@ struct blkdev_info {
 struct benchmark_results {
     char *path;
     struct blkdev_info dev_info;
-    unsigned int seq_read_bytes;
+    size_t seq_read_bytes;
     unsigned int num_seeks;
     uint64_t seq_read_ns;
     uint64_t block_read_ns;
@@ -392,16 +392,16 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
  * Two sequential read operations will be performed; one at the logical
  * beginning of the device, and one at the logical end.
  *
- * p_total_bytes, if non-NULL, should point to an unsigned int which will be
- * set to the total amount of bytes read from the device. p_total_read_ns, if
- * non-NULL, should point to a uint64_t which will be set to the amount of time
- * that was spent reading, in nanoseconds.
+ * p_total_bytes, if non-NULL, should point to a size_t which will be set
+ * to the total amount of bytes read from the device. p_total_read_ns, if
+ * non-NULL, should point to a uint64_t which will be set to the amount of
+ * time that was spent reading, in nanoseconds.
  *
  * Returns the average time it takes to read a single block of the device, in
  * nanoseconds. Exits in case of error.
  */
 static uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
-        size_t read_size, unsigned int *p_total_bytes, uint64_t *p_total_read_ns)
+        size_t read_size, size_t *p_total_bytes, uint64_t *p_total_read_ns)
 {
     size_t aligned_read_size = align_ceil(read_size, blkdev_info->alignment);
     char *buffer;
