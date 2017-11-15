@@ -286,7 +286,10 @@ int join_nonempty(char **joined, char *const strings[], int count, const char *s
             continue;
 
         wptr = stpcpy(wptr, strings[i]);
-        wptr = stpcpy(wptr, sep);
+
+        /* add separator to all but the last string */
+        if (i < count-1)
+            wptr = stpcpy(wptr, sep);
     }
 
     assert(*wptr == '\0');
