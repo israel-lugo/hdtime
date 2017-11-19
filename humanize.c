@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <float.h>
+#include <errno.h>
 
 /* get size_t */
 #include <stddef.h>
@@ -39,6 +40,15 @@
 
 /* get malloc */
 #include <stdlib.h>
+
+/* get strtoumax */
+#include <inttypes.h>
+
+/* get isspace */
+#include <ctype.h>
+
+/* get SIZE_MAX */
+#include <stdint.h>
 
 #if !defined(DEBUG) || !DEBUG
 #  define NDEBUG 1
@@ -64,6 +74,14 @@
 static const char *const BINARY_IEC_UNITS[] = { "B", "KiB", "MiB", "GiB", "TiB",
     "PiB", "EiB", "ZiB", "YiB" };
 #define NUM_BINARY_IEC_UNITS (sizeof(BINARY_IEC_UNITS)/sizeof(BINARY_IEC_UNITS[0]))
+
+static const char *const BINARY_IEC_SHORT_UNITS[] = { "B", "K", "M", "G", "T",
+    "P", "E", "Z", "Y" };
+#define NUM_BINARY_IEC_SHORT_UNITS (sizeof(BINARY_IEC_SHORT_UNITS)/sizeof(BINARY_IEC_SHORT_UNITS[0]))
+
+static const char *const BINARY_SI_UNITS[] = { "B", "KB", "MB", "GB", "TB",
+    "PB", "EB", "ZB", "YB" };
+#define NUM_BINARY_SI_UNITS (sizeof(BINARY_SI_UNITS)/sizeof(BINARY_SI_UNITS[0]))
 
 static const char *const SPEED_IEC_UNITS[] = { "B/s", "KiB/s", "MiB/s", "GiB/s",
     "TiB/s", "PiB/s", "EiB/s", "ZiB/s", "YiB/s" };
@@ -377,5 +395,94 @@ char *humanize_time(uint64_t nanoseconds, int seconds_precision)
     return format_time_value(&t, seconds_precision);
 }
 
+
+/*
+ * Find str in an array of n strings.
+ *
+ * Returns the index of the first occurrence str in array, or a negative
+ * value if it is not found.
+ */
+static int str_in_array(const char *const array[], int n, const char *str)
+{
+    int i;
+
+    for (i=0; i<n; i++)
+    {
+        const int diff = strcmp(str, array[i]);
+        if (diff == 0)
+            return i;
+    }
+
+    return -1;
+}
+
+
+/*
+ * Parse a human size string, and return a size in bytes.
+ *
+ * Parses an option argument from string arg, in the format
+ * "VALUE [UNIT]". The unit may be an IEC unit (e.g. KiB, MiB, for 1024
+ * bytes or 1024*1024 bytes), or an SI unit (e.g. KB, MB, for 1000 bytes or
+ * 1000*1000 bytes)). A short unit (e.g. K, M, G) is interpreted as an IEC
+ * unit.
+ *
+ * If the argument is valid, the function stores the size in bytes in the
+ * size_t pointed-to by result, and returns zero. If the argument is
+ * invalid, the function returns a nonzero error number: ERANGE for value
+ * to large, EINVAL for invalid format.
+ */
+int parse_human_size(const char *arg, size_t *result)
+{
+    char *end;
+    const uintmax_t orig_value = strtoumax(arg, &end, 10);
+
+    if (orig_value > SIZE_MAX)
+    {   /* value doesn't fit in size_t */
+        return ERANGE;
+    }
+
+    /* skip trailing whitespace */
+    while (isspace(*end))
+        end++;
+
+    /* if no unit, just return the value */
+    if (*end == '\0')
+    {
+        *result = (size_t)orig_value;
+        return 0;
+    }
+
+    /* try to find the unit class */
+    unsigned int ratio = 1024;
+    int unit_exp = str_in_array(BINARY_IEC_UNITS, NUM_BINARY_IEC_UNITS, end);
+    if (unit_exp < 0)
+    {   /* not a full IEC unit */
+        unit_exp = str_in_array(BINARY_IEC_SHORT_UNITS, NUM_BINARY_IEC_SHORT_UNITS, end);
+        if (unit_exp < 0)
+        {   /* not a short IEC unit */
+            ratio = 1000;
+            unit_exp = str_in_array(BINARY_SI_UNITS, NUM_BINARY_SI_UNITS, end);
+
+            /* not an SI unit either */
+            if (unit_exp < 0)
+                return EINVAL;
+        }
+    }
+
+    assert(unit_exp >= 0);
+
+    uintmax_t byte_value = orig_value;
+    for (; unit_exp > 0; unit_exp--)
+    {
+        byte_value *= ratio;
+
+        /* check for overflow, or value too big for size_t */
+        if (byte_value < orig_value || byte_value > SIZE_MAX)
+            return ERANGE;
+    }
+
+    *result = (size_t)byte_value;
+    return 0;
+}
 
 /* vim: set expandtab smarttab shiftwidth=4 softtabstop=4 tw=75 : */

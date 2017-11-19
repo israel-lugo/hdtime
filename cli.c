@@ -41,6 +41,7 @@
 #include <getopt.h>
 
 #include "benchmarks.h"
+#include "humanize.h"
 
 
 #define PACKAGE_NAME "hdtime"
@@ -79,7 +80,7 @@ static void show_options(void)
 {
     static const struct { const char *name; const char *desc; } opts[] = {
         { "-c, --read-count=N", "do N random reads in the seek test" },
-        { "-s, --read-size=BYTES", "size of read blocks in the sequential test" },
+        { "-s, --read-size=SIZE", "size of read blocks in the sequential test" },
         { "-h, --help", "display this help and exit" },
         { "-v, --version", "output version information and exit" },
     };
@@ -115,6 +116,11 @@ static void show_usage(void)
            "OPTIONS:\n",
            prog_name);
     show_options();
+    printf("\n"
+           "The SIZE value can be suffixed with an optional unit: KiB, MiB, GiB\n"
+           "TiB, PiB, EiB, ZiB, YiB (powers of 1024), or KB, MB, GB, TB, PB, EB,\n"
+           "ZB, YB (powers of 1000). K, M, G, T, P, E, Z, Y are also accepted, as\n"
+           "powers of 1024.\n");
 }
 
 
@@ -213,6 +219,7 @@ static void parse_args(int argc, char *const argv[],
     for (;;)
     {
         int arg = getopt_long(argc, argv, "c:s:hv", long_opts, NULL);
+        int status;
 
         if (arg == -1)
             break;
@@ -223,9 +230,17 @@ static void parse_args(int argc, char *const argv[],
                 p_cli_options->num_seeks = (unsigned int)get_uint_arg(optarg,
                         1, UINT_MAX, "read count", print_help_string);
                 break;
-            case 's':   /* --read-size <bytes> */
-                p_cli_options->read_size = (size_t)get_uint_arg(optarg, 1,
-                        SIZE_MAX, "read block size", print_help_string);
+            case 's':   /* --read-size <size> */
+                status = parse_human_size(optarg, &p_cli_options->read_size);
+
+                if (status != 0)
+                {
+                    fprintf(stderr,
+                            "%s: invalid read block size given (0..%" PRIuMAX " bytes)\n",
+                            prog_name, SIZE_MAX);
+                    print_help_string();
+                    exit(1);
+                }
                 break;
             case 'h':   /* --help */
                 show_usage();

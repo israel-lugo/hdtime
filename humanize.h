@@ -67,5 +67,6 @@ char *format_time_value(const struct human_time_value *v, int seconds_precision)
 
 char *humanize_time(uint64_t nanoseconds, int seconds_precision);
 
+int parse_human_size(const char *arg, uint64_t *result);
 
 #endif  /* _HUMANIZE_H */
