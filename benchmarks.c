@@ -206,8 +206,8 @@ static unsigned int smallest_power_of_2_that_holds(unsigned int x)
 /*
  * Convert a struct timespec to nanoseconds.
  *
- * May return undefined results if the seconds field contains a value greater
- * than (2**64 - 1) / 10**9, due to integer overflow.
+ * May return undefined results due to integer overflow, if the seconds field
+ * contains a value greater than (2**64 - 1) / 10**9 ~= 2**34 s ~= 584 years.
  */
 static inline uint64_t timespec_to_ns(const struct timespec *ts)
 {
