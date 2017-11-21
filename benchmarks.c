@@ -386,8 +386,8 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
  * speed. Receives the file descriptor of the block device, the desired read
  * size, and a pointer to a struct with information about the device.
  *
- * The desired read size will be rounded up to the nearest multiple of
- * blkdev_info->alignment.
+ * The desired read size must be greater than zero. It will be rounded up
+ * to the nearest multiple of blkdev_info->alignment.
  *
  * Two sequential read operations will be performed; one at the logical
  * beginning of the device, and one at the logical end.
@@ -409,6 +409,7 @@ static uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
     uint64_t delta_ns;
 
     assert(aligned_read_size % blkdev_info->alignment == 0);
+    assert(read_size != 0 && aligned_read_size != 0);
 
     if (aligned_read_size > blkdev_info->dev_size)
     {

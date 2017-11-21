@@ -233,10 +233,10 @@ static void parse_args(int argc, char *const argv[],
             case 's':   /* --read-size <size> */
                 status = parse_human_size(optarg, &p_cli_options->read_size);
 
-                if (status != 0)
-                {
+                if (status != 0 || p_cli_options->read_size == 0)
+                {   /* error, or invalid size 0 specified */
                     fprintf(stderr,
-                            "%s: invalid read block size given (0..%" PRIuMAX " bytes)\n",
+                            "%s: invalid read block size given (1..%" PRIuMAX " bytes)\n",
                             prog_name, SIZE_MAX);
                     print_help_string();
                     exit(1);
