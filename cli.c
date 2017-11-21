@@ -54,10 +54,8 @@
 /* Default value for cli_options.num_seeks. */
 #define DEFAULT_NUM_SEEKS 200
 
-#define MIB (1024 * 1024)
-
-/* Default amount of bytes to read sequentially in a single block. */
-#define DEFAULT_SEQ_READ_BYTES (64 * MIB)
+/* Default value for cli_options.read_size, meaning autodetect. */
+#define DEFAULT_SEQ_READ_BYTES 0
 
 
 /* Program's basename, for printing on error. */
