@@ -165,7 +165,7 @@ static unsigned int log2_floor(unsigned int x)
         x >>= 1;
     }
 
-    assert(exp <= sizeof(x) * 8);
+    assert(exp <= sizeof(x) * CHAR_BIT);
 
     return exp;
 }
@@ -188,7 +188,7 @@ static unsigned int smallest_power_of_2_that_holds(unsigned int x)
         return 1;
 
     /* make sure x fits in the largest power of 2 an unsigned int can hold */
-    if (x > (1U << (sizeof(unsigned int) * 8 - 1)))
+    if (x > (1U << (sizeof(unsigned int)*CHAR_BIT - 1)))
     {
         fprintf(stderr,
                 "error: %u doesn't fit in largest power of 2 an unsigned int can hold\n",
