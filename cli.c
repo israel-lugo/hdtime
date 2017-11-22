@@ -79,6 +79,7 @@ static void show_options(void)
     static const struct { const char *name; const char *desc; } opts[] = {
         { "-c, --read-count=N", "do N random reads in the seek test" },
         { "-s, --read-size=SIZE", "size of read blocks in the sequential test" },
+        { "", "(default: autodetect)" },
         { "-h, --help", "display this help and exit" },
         { "-v, --version", "output version information and exit" },
     };
