@@ -51,8 +51,8 @@
 #define COPYRIGHT "Copyright (C) 2012 Israel G. Lugo"
 
 
-/* Default value for cli_options.num_seeks. */
-#define DEFAULT_NUM_SEEKS 200
+/* Default value for cli_options.num_seeks, meaning autodetect. */
+#define DEFAULT_NUM_SEEKS 0
 
 /* Default value for cli_options.read_size, meaning autodetect. */
 #define DEFAULT_SEQ_READ_BYTES 0
@@ -78,6 +78,7 @@ static void show_options(void)
 {
     static const struct { const char *name; const char *desc; } opts[] = {
         { "-c, --read-count=N", "do N random reads in the seek test" },
+        { "", "(default: autodetect)" },
         { "-s, --read-size=SIZE", "size of read blocks in the sequential test" },
         { "", "(default: autodetect)" },
         { "-h, --help", "display this help and exit" },

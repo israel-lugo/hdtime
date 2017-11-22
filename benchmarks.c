@@ -71,6 +71,15 @@
 
 #define MIB (1024UL * 1024UL)
 
+/* Default amount of random reads to do in the seek test. */
+#define DEFAULT_RAND_READ_SEEKS 200
+
+/* Minimum amount of nanoseconds to spend in the random access test. */
+#define MIN_AUTO_RAND_READ_NS (1000000000UL)
+
+/* Maximum amount of random reads to do in seek test when autodetecting. */
+#define MAX_AUTO_RAND_READ_SEEKS 25600
+
 /* Default amount of bytes to read sequentially in a single block. */
 #define DEFAULT_SEQ_READ_BYTES (64 * MIB)
 
@@ -97,6 +106,7 @@ struct benchmark_results {
     uint64_t seq_read_ns;
     uint64_t block_read_ns;
     uint64_t total_randaccess_ns;
+    uint64_t randaccess_reading_ns;
     uint64_t seek_ns;
 };
 
@@ -531,26 +541,28 @@ static uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
 
 
 /*
- * Get a block device's average seek time, in nanoseconds.
+ * Get a block device's average seek time, for a given number of seeks.
  *
  * Does a random access read test on a block device, to find its average seek
  * time. Receives the file descriptor of the block device, a pointer to a
  * struct with information about the device, the number of seeks to be
  * performed, and the amount of time it takes to read a single block of the
- * device, in nanoseconds. p_total_ns, if non-NULL, should point to a uint64_t
- * which will be set to the amount of time that was spent seeking and reading
- * block data, in nanoseconds.
+ * device, in nanoseconds.
+ *
+ * p_total_ns, if non-NULL, should point to a uint64_t which will be set to
+ * the amount of time that was spent seeking and reading block data, in
+ * nanoseconds.
  *
  * Returns the average seek time of the block device, in nanoseconds. Exits in
  * case of error.  Requires randomness to be previously initialized (call
  * init_randomness).
  */
-static uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
+static uint64_t get_seek_for_count(int fd, const struct blkdev_info *blkdev_info,
         unsigned int num_seeks, uint64_t block_read_ns, uint64_t *p_total_ns)
 {
     const unsigned int block_size = blkdev_info->block_size;
     const uint64_t num_blocks = blkdev_info->num_blocks;
-    const uint64_t time_spent_reading_ns = block_read_ns * num_seeks;
+    const uint64_t randaccess_reading_ns = block_read_ns * num_seeks;
     struct timespec start, end;
     uint64_t delta_ns;
     char *buffer;
@@ -582,12 +594,91 @@ static uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
     if (p_total_ns != NULL)
         *p_total_ns = delta_ns;
 
-    /* time_spent_reading_ns is a calculated estimate; protect against
+    /* randaccess_reading_ns is a calculated estimate; protect against
      * integer underflow if actual time measured (including seek time) was
      * lower than that */
-    return (delta_ns > time_spent_reading_ns)
-           ? (delta_ns - time_spent_reading_ns) / num_seeks
+    return (delta_ns > randaccess_reading_ns)
+           ? (delta_ns - randaccess_reading_ns) / num_seeks
            : 0;
+}
+
+
+
+/*
+ * Get a block device's average seek time.
+ *
+ * Does random access read tests on a block device, to find its average seek
+ * time. Receives the file descriptor of the block device, a pointer to a
+ * struct with information about the device, the (optional) number of seeks
+ * to be performed, and the amount of time it takes to read a single block
+ * of the device, in nanoseconds.
+ *
+ * The random access tests are done by calling get_seek_for_count.
+ *
+ * p_total_ns, if non-NULL, should point to a uint64_t which will be set to
+ * the amount of time that was spent seeking and reading block data, in
+ * nanoseconds. p_randaccess_reading_ns, if non-NULL, should point to a
+ * uint64_t which will be set to the estimated amount of time that was
+ * spent actually reading the data during the seek test (i.e. minus the
+ * seeks themselves).
+ *
+ * Returns the average seek time of the block device, in nanoseconds. Exits in
+ * case of error.  Requires randomness to be previously initialized (call
+ * init_randomness).
+ */
+static uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
+        unsigned int num_seeks, uint64_t block_read_ns, uint64_t *p_total_ns,
+        uint64_t *p_randaccess_reading_ns)
+{
+    uint64_t seek_ns;
+    uint64_t randaccess_reading_ns;
+
+    if (num_seeks == 0)
+    {   /* autodetect seek count */
+        unsigned int total_seeks = 0;
+        uint64_t total_ns = 0;
+
+        /* loop increasing seek count until we take at least a certain
+         * amount of time doing the seeks; keep track of total time and
+         * seeks performed */
+        for (num_seeks = DEFAULT_RAND_READ_SEEKS;
+             total_ns < MIN_AUTO_RAND_READ_NS && num_seeks <= MAX_AUTO_RAND_READ_SEEKS;
+             num_seeks *= 2)
+        {
+            uint64_t _total_ns;
+
+            /* ignore the return value, we calculate it later */
+            (void)get_seek_for_count(fd, blkdev_info, num_seeks,
+                    block_read_ns, &_total_ns);
+
+            total_seeks += num_seeks;
+            total_ns += _total_ns;
+        }
+
+        /* estimate the time it takes to read the blocks of data we seeked
+         * to read, based on the average time it takes to read one block */
+        randaccess_reading_ns = block_read_ns * total_seeks;
+
+        /* protect against integer overflow, as randaccess_reading_ns is an
+         * estimate and may overshoot our measured time, even with seeks*/
+        seek_ns = (total_ns > randaccess_reading_ns)
+                  ? (total_ns - randaccess_reading_ns) / total_seeks : 0;
+
+        if (p_total_ns != NULL)
+            *p_total_ns = total_ns;
+    }
+    else
+    {   /* use specified seek count */
+        seek_ns = get_seek_for_count(fd, blkdev_info, num_seeks, block_read_ns,
+                p_total_ns);
+
+        randaccess_reading_ns = block_read_ns * num_seeks;
+    }
+
+    if (p_randaccess_reading_ns != NULL)
+        *p_randaccess_reading_ns = randaccess_reading_ns;
+
+    return seek_ns;
 }
 
 
@@ -646,7 +737,8 @@ static void run_benchmarks(int fd, unsigned int num_seeks, size_t read_size,
 
     init_randomness();
     res->seek_ns = get_seek_ns(fd, &res->dev_info, num_seeks,
-            res->block_read_ns, &res->total_randaccess_ns);
+            res->block_read_ns, &res->total_randaccess_ns,
+            &res->randaccess_reading_ns);
     res->num_seeks = num_seeks;
 }
 
@@ -678,16 +770,15 @@ static void print_benchmarks(const char *path, const struct benchmark_results *r
             / ((long double)res->seq_read_ns / 1000000000ULL));
 
     /* total time spent actually reading data, while doing random access reads */
-    const uint64_t randaccess_reading_ns = res->block_read_ns * res->num_seeks;
-    char *const randaccess_reading_time = humanize_time(randaccess_reading_ns, 3);
+    char *const randaccess_reading_time = humanize_time(res->randaccess_reading_ns, 3);
 
     /* total time spent in the random access test, in human terms */
     char *const total_randaccess_time = humanize_time(res->total_randaccess_ns, 3);
 
     /* total time spent seeking in seconds, while doing random access reads */
     const uint64_t randaccess_seeking_ns =
-        res->total_randaccess_ns > randaccess_reading_ns
-        ? (res->total_randaccess_ns - randaccess_reading_ns)
+        res->total_randaccess_ns > res->randaccess_reading_ns
+        ? (res->total_randaccess_ns - res->randaccess_reading_ns)
         : 0;
     char *const randaccess_seeking_time = humanize_time(randaccess_seeking_ns, 3);
 
