@@ -582,7 +582,9 @@ static uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
     if (p_total_ns != NULL)
         *p_total_ns = delta_ns;
 
-    /* protect against integer underflow, if we didn't measure any seek time */
+    /* time_spent_reading_ns is a calculated estimate; protect against
+     * integer underflow if actual time measured (including seek time) was
+     * lower than that */
     return (delta_ns > time_spent_reading_ns)
            ? (delta_ns - time_spent_reading_ns) / num_seeks
            : 0;
