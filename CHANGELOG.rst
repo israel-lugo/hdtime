@@ -21,6 +21,9 @@ __ https://github.com/israel-lugo/hdtime/compare/v0.1.0...HEAD
 Added
 .....
 
+- Automatically detect the size of the read blocks in the sequential read test.
+  This is done by default, unless a size is specified. See `issue #5`_.
+
 - New command-line option ``--read-count``. Controls how many random reads to
   do in the seek test. See `issue #1`_.
 
@@ -40,6 +43,7 @@ Fixed
 
 First working release.
 
+.. _issue #5: https://github.com/israel-lugo/hdtime/issues/5
 .. _issue #1: https://github.com/israel-lugo/hdtime/issues/1
 
 .. _0.1.0: https://github.com/israel-lugo/hdtime/tree/v0.1.0

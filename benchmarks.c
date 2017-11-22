@@ -69,6 +69,18 @@
 #endif
 
 
+#define MIB (1024UL * 1024UL)
+
+/* Default amount of bytes to read sequentially in a single block. */
+#define DEFAULT_SEQ_READ_BYTES (64 * MIB)
+
+/* Minimum amount of nanoseconds to spend in the sequential read test. */
+#define MIN_AUTO_SEQ_READ_NS (2000000000UL)
+
+/* Maximum value of read_size in sequential reads when autodetecting. */
+#define MAX_AUTO_SEQ_READ_BYTES (1024UL * MIB)
+
+
 struct blkdev_info {
     uint64_t dev_size;
     uint64_t num_blocks;
@@ -400,8 +412,9 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
  * Returns the average time it takes to read a single block of the device, in
  * nanoseconds. Exits in case of error.
  */
-static uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
-        size_t read_size, size_t *p_total_bytes, uint64_t *p_total_read_ns)
+static uint64_t get_block_read_for_size(int fd,
+        const struct blkdev_info *blkdev_info, size_t read_size,
+        size_t *p_total_bytes, uint64_t *p_total_read_ns)
 {
     size_t aligned_read_size = align_ceil(read_size, blkdev_info->alignment);
     char *buffer;
@@ -442,6 +455,52 @@ static uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
     return delta_ns / ((aligned_read_size * 2) / blkdev_info->block_size);
 }
 
+
+
+static uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
+        size_t read_size, size_t *p_total_bytes, uint64_t *p_total_read_ns)
+{
+    uint64_t block_read_ns;
+
+    if (read_size == 0)
+    {   /* autodetect read size */
+        size_t total_bytes = 0;
+        uint64_t total_read_ns = 0;
+
+        /* loop increading read size until we take at least a certain amount
+         * of time doing the read; keep track of total time and bytes read */
+        for (read_size = DEFAULT_SEQ_READ_BYTES;
+             total_read_ns < MIN_AUTO_SEQ_READ_NS && read_size <= MAX_AUTO_SEQ_READ_BYTES;
+             read_size *= 2)
+        {
+            size_t _total_bytes;
+            uint64_t _total_read_ns;
+
+            /* ignore the return value, we calculate it later */
+            (void)get_block_read_for_size(fd, blkdev_info, read_size,
+                    &_total_bytes, &_total_read_ns);
+
+            total_bytes += _total_bytes;
+            total_read_ns += _total_read_ns;
+        }
+
+        /* calculate the time it takes to read one block, based on the
+         * average time it took to make all automated reads */
+        block_read_ns = total_read_ns / (total_bytes / blkdev_info->block_size);
+
+        if (p_total_bytes != NULL)
+            *p_total_bytes = total_bytes;
+        if (p_total_read_ns != NULL)
+            *p_total_read_ns = total_read_ns;
+    }
+    else
+    {   /* use specified read size */
+        block_read_ns = get_block_read_for_size(fd, blkdev_info, read_size,
+                p_total_bytes, p_total_read_ns);
+    }
+
+    return block_read_ns;
+}
 
 
 /*
