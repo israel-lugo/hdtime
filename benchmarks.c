@@ -566,12 +566,9 @@ static uint64_t get_seek_ns(int fd, const struct blkdev_info *blkdev_info,
 /*
  * Initialize random number generator engine.
  */
-static void init_randomness(void)
+static inline void init_randomness(void)
 {
-    time_t seed;
-
-    time(&seed);
-    srandom(seed);
+    srandom(time(NULL));
 }
 
 
