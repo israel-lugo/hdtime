@@ -392,7 +392,7 @@ static void *allocate_aligned_memory(size_t alignment, size_t size)
 
 
 /*
- * Get a block device's average block read time, in nanoseconds.
+ * Get a block device's average block read time, for a given read size.
  *
  * Does a sequencial read test on a block device, to find its average read
  * speed. Receives the file descriptor of the block device, the desired read
@@ -457,6 +457,33 @@ static uint64_t get_block_read_for_size(int fd,
 
 
 
+/*
+ * Get a block device's average block read time.
+ *
+ * Does sequencial read tests on a block device, to find its average read
+ * speed. Receives the file descriptor of the block device, the (optional)
+ * desired read size, and a pointer to a struct with information about the
+ * device.
+ *
+ * If a non-zero read_size is specified, it will be rounded up to the
+ * nearest multiple of blkdev_info->alignment, and used for a single
+ * sequential read test.
+ *
+ * If read_size is zero, an appropriate read size will be autodetected, by
+ * performing multiple sequential read tests of exponentially increasing
+ * read sizes, until one takes at least MIN_AUTO_SEQ_READ_NS nanoseconds to
+ * complete.
+ *
+ * The sequential read tests are done by calling get_block_read_for_size.
+ *
+ * p_total_bytes, if non-NULL, should point to a size_t which will be set
+ * to the total amount of bytes read from the device, in all read test(s).
+ * p_total_read_ns, if non-NULL, should point to a uint64_t which will be
+ * set to the total amount of time that was spent reading, in nanoseconds.
+ *
+ * Returns the average time it takes to read a single block of the device, in
+ * nanoseconds. Exits in case of error.
+ */
 static uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
         size_t read_size, size_t *p_total_bytes, uint64_t *p_total_read_ns)
 {
