@@ -22,10 +22,10 @@ Added
 .....
 
 - New command-line option ``--read-count``. Controls how many random reads to
-  do in the seek test.
+  do in the seek test. See `issue #1`_.
 
 - New command-line option ``--read-size``. Controls the size of the read blocks
-  in the sequential read test.
+  in the sequential read test. See `issue #1`_.
 
 
 Fixed
@@ -39,5 +39,7 @@ Fixed
 -------------------
 
 First working release.
+
+.. _issue #1: https://github.com/israel-lugo/hdtime/issues/1
 
 .. _0.1.0: https://github.com/israel-lugo/hdtime/tree/v0.1.0
