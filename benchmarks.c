@@ -494,7 +494,7 @@ static uint64_t get_block_read_ns(int fd, const struct blkdev_info *blkdev_info,
         size_t total_bytes = 0;
         uint64_t total_read_ns = 0;
 
-        /* loop increading read size until we take at least a certain amount
+        /* loop increasing read size until we take at least a certain amount
          * of time doing the read; keep track of total time and bytes read */
         for (read_size = DEFAULT_SEQ_READ_BYTES;
              total_read_ns < MIN_AUTO_SEQ_READ_NS && read_size <= MAX_AUTO_SEQ_READ_BYTES;
